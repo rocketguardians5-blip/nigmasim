@@ -626,3 +626,18 @@ Perkiraan ini mengasumsikan requirement tidak berubah di tengah jalan dan aplika
 2. Jawab pertanyaan §13 (minimal nomor 1 dan 2).
 3. Setelah disetujui → implementasi Sprint 1.1.
 4. Setiap sprint selesai: jalankan tes, review, lalu commit ke Git.
+
+---
+
+## 17. Catatan Progres
+
+| Tanggal | Sprint | Hasil | Bukti |
+|---|---|---|---|
+| 11 Nov 2026 | 1.1 | Backend FastAPI, auth JWT + refresh rotation, Argon2id, RBAC, user & role CRUD, audit log, migrasi Alembic | 20 pytest lulus |
+| 11 Nov 2026 | 1.2 | Application Registry (daftar, detail, otorisasi capture, hapus), Project per aplikasi, aturan "harus approved sebelum project dibuat" | 20 pytest lulus |
+| 11 Nov 2026 | 1.5 (bagian) | Frontend admin: login, dashboard, registry, detail aplikasi, user management, halaman status untuk modul yang belum jadi | build Vite lulus, alur penuh diuji lewat browser |
+| — | 1.3 | Metadata capture (screen, element, interaksi) — model sudah ada, endpoint belum | menyusul |
+| — | 1.4 | Capture Worker (Playwright + Chromium) | menyusul |
+
+Catatan mesin: Rollup native diblokir Windows Application Control, digantikan build WASM resmi
+lewat npm `overrides`. Detail ada di `docs/01-INSTALASI-DAN-MENJALANKAN.md` §6.

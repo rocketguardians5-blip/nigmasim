@@ -1,0 +1,82 @@
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import type { ReactElement } from 'react'
+import { useAuth } from './lib/auth'
+import { AdminLayout } from './layouts/AdminLayout'
+import { LoginPage } from './pages/Login'
+import { DashboardPage } from './pages/Dashboard'
+import { ApplicationsPage } from './pages/Applications'
+import { ApplicationDetailPage } from './pages/ApplicationDetail'
+import { UsersPage } from './pages/Users'
+import { PlaceholderPage } from './pages/Placeholder'
+import { Spinner } from './components/ui'
+
+function RequireAuth({ children }: { children: ReactElement }) {
+  const { user, loading } = useAuth()
+  const location = useLocation()
+
+  if (loading) {
+    return (
+      <div className="grid h-full place-items-center">
+        <Spinner className="h-7 w-7 text-slate-300" />
+      </div>
+    )
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
+
+  return children
+}
+
+function PlaceholderRoute() {
+  const location = useLocation()
+  return <PlaceholderPage path={location.pathname} />
+}
+
+export function App() {
+  const { user, loading } = useAuth()
+
+  return (
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          loading ? (
+            <div className="grid h-full place-items-center">
+              <Spinner className="h-7 w-7 text-slate-300" />
+            </div>
+          ) : user ? (
+            <Navigate to="/" replace />
+          ) : (
+            <LoginPage />
+          )
+        }
+      />
+
+      <Route
+        element={
+          <RequireAuth>
+            <AdminLayout />
+          </RequireAuth>
+        }
+      >
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/applications" element={<ApplicationsPage />} />
+        <Route path="/applications/:id" element={<ApplicationDetailPage />} />
+        <Route path="/users" element={<UsersPage />} />
+        <Route path="/capture" element={<PlaceholderRoute />} />
+        <Route path="/screens" element={<PlaceholderRoute />} />
+        <Route path="/reconstruction" element={<PlaceholderRoute />} />
+        <Route path="/simulation" element={<PlaceholderRoute />} />
+        <Route path="/workflow" element={<PlaceholderRoute />} />
+        <Route path="/tutorial" element={<PlaceholderRoute />} />
+        <Route path="/documentation" element={<PlaceholderRoute />} />
+        <Route path="/demos" element={<PlaceholderRoute />} />
+        <Route path="/analytics" element={<PlaceholderRoute />} />
+        <Route path="/settings" element={<PlaceholderRoute />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
+  )
+}
