@@ -103,7 +103,20 @@ cd C:\Users\Lenovo\nigmasim\frontend
 npm install
 npm run dev        # http://localhost:5173
 npm run build      # sekaligus type-check TypeScript
+
+# capture worker (proses TERPISAH, terminal ketiga)
+cd C:\Users\Lenovo\nigmasim\capture-worker
+& "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe" -m venv .venv   # sekali saja
+.\.venv\Scripts\python.exe -m pip install playwright==1.49.1 fastapi==0.115.6 `
+  "uvicorn[standard]==0.34.0" pydantic==2.10.4 pydantic-settings==2.7.0 `
+  pillow==11.0.0 httpx==0.28.1
+.\.venv\Scripts\python.exe -m playwright install chromium
+cd src   # WAJIB dari folder src/ agar import modul datar & .env ketemu
+..\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8010
 ```
+
+Tiga proses yang harus hidup bersamaan: backend (8000), frontend (5173), capture worker (8010).
+Aplikasi contoh untuk uji capture: `samples/sample-app/` → `python -m http.server 8099`.
 
 Login development: `admin@nigmasim.com` / `Admin#12345` (ganti sebelum dipakai di server).
 
@@ -130,9 +143,10 @@ Frontend Admin ──► Backend API ──► Capture Worker ──► Aplikasi
 
 ## Status sekarang
 
-Phase 1 (8 fase total). Sudah jadi: fondasi, autentikasi, user & role, Application Registry,
-project, audit log, frontend admin. Berikutnya: Sprint 1.3 (endpoint metadata capture) dan
-Sprint 1.4 (Capture Worker Playwright).
+Phase 1 selesai seluruhnya (Sprint 1.1–1.5): fondasi, autentikasi, user & role,
+Application Registry, project, audit log, **Capture Worker Playwright**, Screen Repository
+dengan masking, dan frontend admin. Berikutnya: Phase 3 UI Reconstruction dan
+Phase 4 Full Simulation.
 
 Rincian per fase ada di `references/status-phase.md` — **baca file itu sebelum**
 mengambil keputusan tentang apa yang sudah ada.
