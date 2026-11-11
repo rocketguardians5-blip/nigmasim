@@ -202,31 +202,31 @@ export function ApplicationDetailPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+            <table className="w-full text-left text-[13px]">
+              <thead className="table-head">
                 <tr>
-                  <th className="pb-3 pr-4 font-medium">Project</th>
-                  <th className="pb-3 pr-4 font-medium">Versi</th>
-                  <th className="pb-3 pr-4 font-medium">Status</th>
-                  <th className="pb-3 font-medium">Dibuat</th>
+                  <th className="pb-2.5 pr-4">Project</th>
+                  <th className="pb-2.5 pr-4">Versi</th>
+                  <th className="pb-2.5 pr-4">Status</th>
+                  <th className="pb-2.5">Dibuat</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {projects.map((project) => {
                   const status = PROJECT_STATUS[project.status] ?? PROJECT_STATUS.draft
                   return (
-                    <tr key={project.id} className="hover:bg-slate-50">
-                      <td className="py-3 pr-4">
+                    <tr key={project.id} className="table-row">
+                      <td className="py-2.5 pr-4">
                         <p className="font-medium text-slate-900">{project.name}</p>
                         {project.description && (
                           <p className="text-xs text-slate-500">{project.description}</p>
                         )}
                       </td>
-                      <td className="py-3 pr-4 text-slate-600">{project.version}</td>
-                      <td className="py-3 pr-4">
+                      <td className="py-2.5 pr-4 text-slate-600 tabular">{project.version}</td>
+                      <td className="py-2.5 pr-4">
                         <Badge tone={status.tone}>{status.label}</Badge>
                       </td>
-                      <td className="py-3 text-xs text-slate-500">
+                      <td className="py-2.5 text-xs text-slate-500 tabular">
                         {new Date(project.created_at).toLocaleDateString('id-ID')}
                       </td>
                     </tr>
@@ -281,8 +281,8 @@ export function ApplicationDetailPage() {
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-1 break-words text-sm text-slate-900">{value}</dd>
+      <dt className="text-[13px] font-medium text-slate-500">{label}</dt>
+      <dd className="mt-0.5 break-words text-[13px] text-slate-900">{value}</dd>
     </div>
   )
 }

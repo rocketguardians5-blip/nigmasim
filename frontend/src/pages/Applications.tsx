@@ -153,7 +153,7 @@ export function ApplicationsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <span className="text-xs text-slate-500">{items.length} aplikasi</span>
+          <span className="text-xs text-slate-500 tabular">{items.length} aplikasi</span>
         </div>
 
         {loading ? (
@@ -167,38 +167,38 @@ export function ApplicationsPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+            <table className="w-full text-left text-[13px]">
+              <thead className="table-head">
                 <tr>
-                  <th className="pb-3 pr-4 font-medium">Aplikasi</th>
-                  <th className="pb-3 pr-4 font-medium">Kategori</th>
-                  <th className="pb-3 pr-4 font-medium">Environment</th>
-                  <th className="pb-3 pr-4 font-medium">Otorisasi</th>
-                  <th className="pb-3 text-right font-medium">Aksi</th>
+                  <th className="pb-2.5 pr-4">Aplikasi</th>
+                  <th className="pb-2.5 pr-4">Kategori</th>
+                  <th className="pb-2.5 pr-4">Environment</th>
+                  <th className="pb-2.5 pr-4">Otorisasi</th>
+                  <th className="pb-2.5 text-right">Aksi</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {items.map((app) => (
-                  <tr key={app.id} className="hover:bg-slate-50">
-                    <td className="py-3 pr-4">
+                  <tr key={app.id} className="table-row">
+                    <td className="py-2.5 pr-4">
                       <Link
                         to={`/applications/${app.id}`}
-                        className="font-medium text-slate-900 hover:text-brand-600"
+                        className="font-medium text-slate-900 transition-colors hover:text-brand-600"
                       >
                         {app.name}
                       </Link>
                       <p className="max-w-xs truncate text-xs text-slate-500">{app.source_url}</p>
                     </td>
-                    <td className="py-3 pr-4 text-slate-600">{app.category ?? '—'}</td>
-                    <td className="py-3 pr-4 text-slate-600">{app.environment_label}</td>
-                    <td className="py-3 pr-4">
+                    <td className="py-2.5 pr-4 text-slate-600">{app.category ?? '—'}</td>
+                    <td className="py-2.5 pr-4 text-slate-600">{app.environment_label}</td>
+                    <td className="py-2.5 pr-4">
                       <AuthorizationBadge status={app.authorization_status} />
                     </td>
-                    <td className="py-3 text-right">
-                      <div className="flex justify-end gap-1">
+                    <td className="py-2.5 text-right">
+                      <div className="flex justify-end gap-0.5">
                         <Link
                           to={`/applications/${app.id}`}
-                          className="rounded-md px-2.5 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50"
+                          className="rounded px-2 py-1 text-xs font-medium text-brand-600 transition-colors hover:bg-brand-50"
                         >
                           Detail
                         </Link>
@@ -214,7 +214,7 @@ export function ApplicationsPage() {
                               })
                               setFormError(null)
                             }}
-                            className="rounded-md px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                            className="rounded px-2 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
                           >
                             Otorisasi
                           </button>
@@ -223,7 +223,7 @@ export function ApplicationsPage() {
                           <button
                             type="button"
                             onClick={() => void handleDelete(app)}
-                            className="rounded-md px-2.5 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50"
+                            className="rounded px-2 py-1 text-xs font-medium text-rose-600 transition-colors hover:bg-rose-50"
                           >
                             Hapus
                           </button>

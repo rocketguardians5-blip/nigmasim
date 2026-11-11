@@ -121,36 +121,36 @@ export function UsersPage() {
             <EmptyState title="Belum ada pengguna" description="Tambahkan akun pertama untuk platform." />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500">
+              <table className="w-full text-left text-[13px]">
+                <thead className="table-head">
                   <tr>
-                    <th className="pb-3 pr-4 font-medium">Nama</th>
-                    <th className="pb-3 pr-4 font-medium">Peran</th>
-                    <th className="pb-3 pr-4 font-medium">Status</th>
-                    <th className="pb-3 text-right font-medium">Aksi</th>
+                    <th className="pb-2.5 pr-4">Nama</th>
+                    <th className="pb-2.5 pr-4">Peran</th>
+                    <th className="pb-2.5 pr-4">Status</th>
+                    <th className="pb-2.5 text-right">Aksi</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody>
                   {users.map((row) => (
-                    <tr key={row.id} className="hover:bg-slate-50">
-                      <td className="py-3 pr-4">
+                    <tr key={row.id} className="table-row">
+                      <td className="py-2.5 pr-4">
                         <p className="font-medium text-slate-900">{row.name}</p>
                         <p className="text-xs text-slate-500">{row.email}</p>
                       </td>
-                      <td className="py-3 pr-4 text-slate-600">{row.role.name}</td>
-                      <td className="py-3 pr-4">
+                      <td className="py-2.5 pr-4 text-slate-600">{row.role.name}</td>
+                      <td className="py-2.5 pr-4">
                         {row.status === 'active' ? (
                           <Badge tone="success">Aktif</Badge>
                         ) : (
                           <Badge tone="danger">Nonaktif</Badge>
                         )}
                       </td>
-                      <td className="py-3 text-right">
+                      <td className="py-2.5 text-right">
                         {can('users:write') && row.id !== currentUser?.id && (
                           <button
                             type="button"
                             onClick={() => void toggleStatus(row)}
-                            className="rounded-md px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                            className="rounded px-2 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
                           >
                             {row.status === 'active' ? 'Nonaktifkan' : 'Aktifkan'}
                           </button>

@@ -28,28 +28,28 @@ export function LoginPage() {
 
   return (
     <div className="grid min-h-full lg:grid-cols-2">
-      <div className="hidden flex-col justify-between bg-ink-900 p-10 lg:flex">
+      <div className="hidden flex-col justify-between border-r border-slate-200 bg-ink-900 p-10 lg:flex">
         <div className="flex items-center gap-2.5">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-brand-600 text-sm font-bold text-white">
+          <div className="grid h-7 w-7 place-items-center rounded bg-brand-600 text-[11px] font-bold text-white">
             NS
           </div>
           <div>
-            <p className="text-sm font-semibold text-white">NigmaSim</p>
-            <p className="text-[11px] text-slate-400">PT Nigmagrid Indo Nesia</p>
+            <p className="text-[13px] font-semibold leading-tight text-white">NigmaSim</p>
+            <p className="text-[11px] leading-tight text-slate-500">PT Nigmagrid Indo Nesia</p>
           </div>
         </div>
 
         <div className="max-w-md">
-          <h1 className="text-2xl font-semibold leading-snug text-white">
-            Bangun simulasi aplikasi yang aman untuk demo, pelatihan, dan dokumentasi.
+          <h1 className="text-xl font-semibold leading-snug text-white">
+            Simulasi aplikasi yang aman untuk demo, pelatihan, dan dokumentasi.
           </h1>
-          <p className="mt-3 text-sm leading-relaxed text-slate-400">
+          <p className="mt-3 text-[13px] leading-relaxed text-slate-400">
             NigmaSim merekonstruksi tampilan aplikasi yang telah diotorisasi menjadi simulasi
             interaktif dengan data dummy — tanpa pernah menyentuh database atau API produksi.
           </p>
         </div>
 
-        <p className="text-[11px] leading-relaxed text-slate-500">
+        <p className="text-[11px] leading-relaxed text-slate-600">
           Akses hanya untuk pengguna terdaftar. Seluruh aktivitas dicatat dalam audit log.
         </p>
       </div>
@@ -57,15 +57,15 @@ export function LoginPage() {
       <div className="flex items-center justify-center bg-slate-50 p-6">
         <div className="w-full max-w-sm">
           <div className="mb-8 lg:hidden">
-            <div className="mb-3 grid h-10 w-10 place-items-center rounded-lg bg-brand-600 text-sm font-bold text-white">
+            <div className="mb-3 grid h-7 w-7 place-items-center rounded bg-brand-600 text-[11px] font-bold text-white">
               NS
             </div>
-            <p className="text-lg font-semibold text-slate-900">NigmaSim</p>
-            <p className="text-xs text-slate-500">Simulation Platform</p>
+            <p className="text-[13px] font-semibold text-slate-900">NigmaSim</p>
+            <p className="text-[11px] text-slate-500">Simulation Platform</p>
           </div>
 
-          <h2 className="text-xl font-semibold text-slate-900">Masuk ke NigmaSim</h2>
-          <p className="mt-1 text-sm text-slate-500">Gunakan akun internal yang terdaftar.</p>
+          <h2 className="text-lg font-semibold text-slate-900">Masuk ke NigmaSim</h2>
+          <p className="mt-0.5 text-[13px] text-slate-500">Gunakan akun internal yang terdaftar.</p>
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             {error && <Alert tone="danger">{error}</Alert>}

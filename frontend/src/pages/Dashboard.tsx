@@ -87,14 +87,12 @@ export function DashboardPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (
-          <div key={stat.label} className="card p-5">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              {stat.label}
-            </p>
+          <div key={stat.label} className="card px-5 py-4">
+            <p className="text-[13px] text-slate-500">{stat.label}</p>
             {loading ? (
-              <Spinner className="mt-3 h-6 w-6 text-slate-300" />
+              <Spinner className="mt-2 h-5 w-5 text-slate-300" />
             ) : (
-              <p className={`mt-1 text-3xl font-semibold ${stat.tone}`}>{stat.value}</p>
+              <p className={`mt-1 text-2xl font-semibold tabular ${stat.tone}`}>{stat.value}</p>
             )}
           </div>
         ))}
@@ -123,11 +121,11 @@ export function DashboardPage() {
           ) : (
             <ul className="divide-y divide-slate-100">
               {applications.slice(0, 5).map((app) => (
-                <li key={app.id} className="flex items-center justify-between gap-3 py-3">
+                <li key={app.id} className="flex items-center justify-between gap-3 py-2.5">
                   <div className="min-w-0">
                     <Link
                       to={`/applications/${app.id}`}
-                      className="truncate text-sm font-medium text-slate-900 hover:text-brand-600"
+                      className="truncate text-[13px] font-medium text-slate-900 transition-colors hover:text-brand-600"
                     >
                       {app.name}
                     </Link>
@@ -141,21 +139,19 @@ export function DashboardPage() {
         </Card>
 
         <Card title="Status pengembangan" description="Progres per fase proyek.">
-          <ol className="space-y-2.5">
+          <ol className="space-y-2">
             {PHASES.map((phase, index) => (
-              <li key={phase.name} className="flex items-start gap-2.5 text-sm">
+              <li key={phase.name} className="flex items-start gap-2.5 text-[13px]">
                 <span
-                  className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[10px] font-semibold ${
-                    index === 0
-                      ? 'bg-brand-600 text-white'
-                      : 'bg-slate-100 text-slate-500'
+                  className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded text-[10px] font-medium ${
+                    index === 0 ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-500'
                   }`}
                 >
                   {index + 1}
                 </span>
                 <span className={index === 0 ? 'text-slate-900' : 'text-slate-500'}>
                   {phase.name}
-                  <span className="text-xs text-slate-400">{phase.state}</span>
+                  <span className="ml-1.5 text-xs text-slate-400">{phase.state}</span>
                 </span>
               </li>
             ))}

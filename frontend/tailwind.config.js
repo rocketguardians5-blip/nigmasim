@@ -4,26 +4,46 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Netral — satu-satunya warna mendasar di UI
         ink: {
-          950: '#0b1220',
-          900: '#111a2e',
-          800: '#1b2640',
-          700: '#2a3854',
+          950: '#0A0F1A',
+          900: '#111827',
+          800: '#1F2937',
+          700: '#374151',
         },
+        // Aksen tunggal
         brand: {
-          50: '#eef6ff',
-          100: '#d9ebff',
-          400: '#4b9bff',
-          500: '#2f86f6',
-          600: '#1c6fdd',
-          700: '#175bb4',
+          50: '#EFF6FF',
+          100: '#DBEAFE',
+          200: '#BFDBFE',
+          300: '#93C5FD',
+          500: '#3B82F6',
+          600: '#2563EB',
+          700: '#1D4ED8',
         },
       },
-      fontFamily: {
-        sans: ['Inter', 'Segoe UI', 'system-ui', 'sans-serif'],
+      borderRadius: {
+        sm: '3px',
+        DEFAULT: '5px',
+        md: '6px',
+        lg: '8px',
+        xl: '10px',
       },
       boxShadow: {
-        card: '0 1px 2px rgba(16,24,40,0.06), 0 1px 3px rgba(16,24,40,0.1)',
+        // Kartu TIDAK memakai shadow. Hanya overlay.
+        card: 'none',
+        overlay: '0 12px 32px -12px rgba(15, 23, 42, 0.22)',
+        pop: '0 4px 12px -4px rgba(15, 23, 42, 0.14)',
+      },
+      fontFamily: {
+        sans: ['Inter', 'Segoe UI', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+      },
+      transitionDuration: {
+        DEFAULT: '150ms',
+      },
+      transitionTimingFunction: {
+        DEFAULT: 'cubic-bezier(0.4, 0, 0.2, 1)',
       },
     },
   },
