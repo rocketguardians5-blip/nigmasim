@@ -28,9 +28,9 @@ tumpang tindih — hanya batas fase 1–2 yang sedikit berbeda.
 |---|---|---|---|
 | 1.1 | Backend FastAPI, auth JWT + refresh rotation, Argon2id, RBAC, user & role, audit log, migrasi Alembic | ✅ | 20 pytest lulus |
 | 1.2 | Application Registry (CRUD + otorisasi capture), Project per aplikasi, aturan "harus approved" | ✅ | 20 pytest lulus + uji manual di browser |
-| 1.3 | Metadata capture: endpoint screen, element, interaction | 🟳 | Model DB sudah ada, endpoint belum |
-| 1.4 | Capture Worker: Playwright + Chromium, sesi browser, screenshot, masking, recorder | ❌ | Folder kosong |
-| 1.5 | Frontend admin | 🟳 | Semua fitur yang ada sudah UI; halaman Capture Studio masih status |
+| 1.3 | Metadata capture: endpoint screen, element, interaction, review, masking | ✅ | 6 test baru; masking diverifikasi (file masked ≠ raw) |
+| 1.4 | Capture Worker: Playwright + Chromium, sesi browser, screenshot, rekam interaksi | ✅ | Uji end-to-end: sample app → screenshot 1440×900 → 8 elemen terdeteksi |
+| 1.5 | Frontend admin | ✅ | Capture Studio & Screen Repository sudah berfungsi (bukan status lagi) |
 | 1.6 | Docker Compose, Nginx, dokumentasi operator | 🟳 | Dokumentasi ✅, Docker ❌ (ditunda: deployment adalah urusan pemilik proyek) |
 
 ---

@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     # ---------- Database ----------
     database_url: str = "sqlite:///./nigmasim.db"
 
+    # Hanya untuk development: izinkan mendaftarkan aplikasi pada host internal
+    # (127.0.0.1/lokal) supaya alur capture bisa diuji tanpa aplikasi produksi.
+    # WAJIB false di production.
+    allow_private_hosts_in_registry: bool = False
+
     # ---------- Storage ----------
     storage_root: str = "./storage"
     max_screenshot_mb: int = 25

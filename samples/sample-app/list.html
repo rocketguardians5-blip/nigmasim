@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NigmaRisk — Project Risk</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, "Segoe UI", system-ui, sans-serif; background: #f5f7fa; color: #0f172a; font-size: 14px; }
+      .layout { display: flex; min-height: 100vh; }
+      aside { width: 224px; background: #111827; color: #cbd5e1; padding: 20px 0; flex-shrink: 0; }
+      .brand { display: flex; align-items: center; gap: 10px; padding: 0 20px 20px; border-bottom: 1px solid #1f2937; }
+      .logo { width: 30px; height: 30px; border-radius: 5px; background: #2563eb; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 12px; }
+      .brand b { color: #fff; font-size: 14px; }
+      .brand span { display: block; color: #64748b; font-size: 11px; }
+      nav a { display: block; padding: 9px 20px; color: #cbd5e1; text-decoration: none; font-size: 13px; }
+      nav a.active { background: rgba(255,255,255,.07); color: #fff; border-left: 2px solid #2563eb; }
+      main { flex: 1; padding: 24px 28px; }
+      header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+      h1 { font-size: 19px; margin: 0; }
+      .muted { color: #64748b; font-size: 12px; }
+      .toolbar { display: flex; gap: 10px; margin-bottom: 14px; }
+      input, select { border: 1px solid #cbd5e1; border-radius: 5px; padding: 8px 10px; font-size: 13px; }
+      .panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      th { text-align: left; color: #64748b; font-weight: 500; font-size: 11px; padding: 10px 16px; border-bottom: 1px solid #e2e8f0; }
+      td { padding: 11px 16px; border-bottom: 1px solid #f1f5f9; }
+      .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; }
+      .tinggi { background: #fef2f2; color: #b91c1c; }
+      .sedang { background: #fffbeb; color: #b45309; }
+      .rendah { background: #f0fdf4; color: #15803d; }
+      button { background: #2563eb; color: #fff; border: 0; border-radius: 5px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
+      .ghost { background: #fff; color: #334155; border: 1px solid #cbd5e1; }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <aside>
+        <div class="brand">
+          <div class="logo">NR</div>
+          <div><b>NigmaRisk</b><span>Risk Management</span></div>
+        </div>
+        <nav>
+          <a href="index.html">Dashboard</a>
+          <a href="list.html" class="active">Project Risk</a>
+          <a href="form.html">Risk Assessment</a>
+          <a href="list.html">Risk Monitoring</a>
+          <a href="index.html">Reporting</a>
+          <a href="index.html">Master Data</a>
+          <a href="index.html">User Management</a>
+        </nav>
+      </aside>
+      <main>
+        <header>
+          <div>
+            <h1>Project Risk</h1>
+            <div class="muted">127 risiko terdaftar pada 9 proyek</div>
+          </div>
+          <button>+ Tambah Risiko</button>
+        </header>
+        <div class="toolbar">
+          <input placeholder="Cari risiko…" style="width: 240px" />
+          <select style="width: 170px"><option>Semua Tingkat</option><option>Tinggi</option><option>Sedang</option><option>Rendah</option></select>
+          <select style="width: 170px"><option>Semua Proyek</option><option>Proyek Alpha</option><option>Proyek Beta</option></select>
+          <button class="ghost">Terapkan</button>
+        </div>
+        <div class="panel">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Judul Risiko</th><th>Proyek</th><th>Kategori</th><th>Tingkat</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>RSK-2026-0142</td><td>Keterlambatan Pengadaan Vendor</td><td>Proyek Sigma</td><td>Operasional</td><td><span class="pill tinggi">Tinggi</span></td><td>Diajukan</td></tr>
+              <tr><td>RSK-2026-0141</td><td>Kenaikan Biaya Material</td><td>Proyek Delta</td><td>Finansial</td><td><span class="pill sedang">Sedang</span></td><td>Direview</td></tr>
+              <tr><td>RSK-2026-0140</td><td>Gangguan Tim Proyek</td><td>Proyek Alpha</td><td>SDM</td><td><span class="pill rendah">Rendah</span></td><td>Disetujui</td></tr>
+              <tr><td>RSK-2026-0139</td><td>Gangguan Sistem Core</td><td>Proyek Beta</td><td>Teknologi</td><td><span class="pill tinggi">Tinggi</span></td><td>Diajukan</td></tr>
+              <tr><td>RSK-2026-0138</td><td>Perubahan Regulasi</td><td>Proyek Gamma</td><td>Legal</td><td><span class="pill sedang">Sedang</span></td><td>Direview</td></tr>
+              <tr><td>RSK-2026-0137</td><td>Kegagalan Audit Vendor</td><td>Proyek Sigma</td><td>Legal</td><td><span class="pill tinggi">Tinggi</span></td><td>Revisi</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

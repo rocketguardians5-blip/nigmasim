@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NigmaRisk — Risk Assessment</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, "Segoe UI", system-ui, sans-serif; background: #f5f7fa; color: #0f172a; font-size: 14px; }
+      .layout { display: flex; min-height: 100vh; }
+      aside { width: 224px; background: #111827; color: #cbd5e1; padding: 20px 0; flex-shrink: 0; }
+      .brand { display: flex; align-items: center; gap: 10px; padding: 0 20px 20px; border-bottom: 1px solid #1f2937; }
+      .logo { width: 30px; height: 30px; border-radius: 5px; background: #2563eb; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 12px; }
+      .brand b { color: #fff; font-size: 14px; }
+      .brand span { display: block; color: #64748b; font-size: 11px; }
+      nav a { display: block; padding: 9px 20px; color: #cbd5e1; text-decoration: none; font-size: 13px; }
+      nav a.active { background: rgba(255,255,255,.07); color: #fff; border-left: 2px solid #2563eb; }
+      main { flex: 1; padding: 24px 28px; }
+      h1 { font-size: 19px; margin: 0 0 4px; }
+      .muted { color: #64748b; font-size: 12px; }
+      .panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; max-width: 620px; }
+      label { display: block; font-size: 12px; color: #475569; margin: 14px 0 5px; font-weight: 500; }
+      input, select, textarea { width: 100%; border: 1px solid #cbd5e1; border-radius: 5px; padding: 8px 10px; font-size: 13px; font-family: inherit; }
+      textarea { height: 80px; }
+      .actions { display: flex; gap: 8px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #f1f5f9; }
+      button { background: #2563eb; color: #fff; border: 0; border-radius: 5px; padding: 8px 16px; font-size: 13px; cursor: pointer; }
+      button.ghost { background: #fff; color: #334155; border: 1px solid #cbd5e1; }
+      .hint { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <aside>
+        <div class="brand">
+          <div class="logo">NR</div>
+          <div><b>NigmaRisk</b><span>Risk Management</span></div>
+        </div>
+        <nav>
+          <a href="index.html">Dashboard</a>
+          <a href="list.html">Project Risk</a>
+          <a href="form.html" class="active">Risk Assessment</a>
+          <a href="list.html">Risk Monitoring</a>
+          <a href="index.html">Reporting</a>
+          <a href="index.html">Master Data</a>
+          <a href="index.html">User Management</a>
+        </nav>
+      </aside>
+      <main>
+        <h1>Risk Assessment</h1>
+        <div class="muted" style="margin-bottom: 16px">Formulir penilaian risiko baru</div>
+        <div class="panel">
+          <form>
+            <label>Judul Risiko *</label>
+            <input placeholder="Contoh: Keterlambatan Pengadaan Vendor" />
+
+            <label>Proyek</label>
+            <select><option>Proyek Sigma</option><option>Proyek Delta</option><option>Proyek Alpha</option></select>
+
+            <label>Kategori Risiko</label>
+            <select><option>Operasional</option><option>Finansial</option><option>SDM</option><option>Teknologi</option><option>Legal</option></select>
+
+            <label>Deskripsi Risiko</label>
+            <textarea placeholder="Jelaskan risiko, penyebab, dan dampak yang mungkin terjadi"></textarea>
+
+            <label>Tingkat Risiko</label>
+            <select><option>Tinggi</option><option>Sedang</option><option>Rendah</option></select>
+            <div class="hint">Risiko dengan level Tinggi memerlukan persetujuan direksi.</div>
+
+            <label>Nilai Dampak (1–100)</label>
+            <input type="number" value="45" />
+
+            <div class="actions">
+              <button type="button">Simpan Risiko</button>
+              <button type="button" class="ghost">Batal</button>
+            </div>
+          </form>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

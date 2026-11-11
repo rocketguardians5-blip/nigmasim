@@ -8,6 +8,8 @@ import { ApplicationsPage } from './pages/Applications'
 import { ApplicationDetailPage } from './pages/ApplicationDetail'
 import { UsersPage } from './pages/Users'
 import { PlaceholderPage } from './pages/Placeholder'
+import { CaptureStudioPage } from './pages/CaptureStudio'
+import { ScreenRepositoryPage } from './pages/ScreenRepository'
 import { Spinner } from './components/ui'
 
 function RequireAuth({ children }: { children: ReactElement }) {
@@ -65,8 +67,8 @@ export function App() {
         <Route path="/applications" element={<ApplicationsPage />} />
         <Route path="/applications/:id" element={<ApplicationDetailPage />} />
         <Route path="/users" element={<UsersPage />} />
-        <Route path="/capture" element={<PlaceholderRoute />} />
-        <Route path="/screens" element={<PlaceholderRoute />} />
+        <Route path="/capture" element={<CaptureStudioPage />} />
+        <Route path="/screens" element={<ScreenRepositoryPage />} />
         <Route path="/reconstruction" element={<PlaceholderRoute />} />
         <Route path="/simulation" element={<PlaceholderRoute />} />
         <Route path="/workflow" element={<PlaceholderRoute />} />

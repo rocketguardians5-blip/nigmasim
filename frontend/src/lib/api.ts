@@ -7,6 +7,8 @@
 
 const BASE: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
 
+export const API_BASE = BASE
+
 const ACCESS_KEY = 'nigmasim.access'
 const REFRESH_KEY = 'nigmasim.refresh'
 
@@ -184,6 +186,22 @@ export const api = {
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
+}
+
+/**
+ * Ambil file biner (screenshot) dengan header autentikasi.
+ * <img src> biasa tidak bisa mengirim header, jadi ini cara yang aman.
+ */
+export async function fetchBlobUrl(path: string): Promise<string> {
+  const headers: Record<string, string> = {}
+  const access = tokenStore.access
+  if (access) headers.Authorization = `Bearer ${access}`
+
+  const response = await fetch(`${BASE}${path}`, { headers })
+  if (!response.ok) throw new Error(`Gagal memuat berkas (${response.status})`)
+
+  const blob = await response.blob()
+  return URL.createObjectURL(blob)
 }
 
 /* ---------- Endpoint spesifik ---------- */

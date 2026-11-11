@@ -32,8 +32,8 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: IconDashboard, end: true },
   { to: '/applications', label: 'Application Registry', icon: IconApps },
-  { to: '/capture', label: 'Capture Studio', icon: IconCamera, soon: true },
-  { to: '/screens', label: 'Screen Repository', icon: IconImages, soon: true },
+  { to: '/capture', label: 'Capture Studio', icon: IconCamera },
+  { to: '/screens', label: 'Screen Repository', icon: IconImages },
   { to: '/reconstruction', label: 'UI Reconstruction', icon: IconWand, soon: true },
   { to: '/simulation', label: 'Simulation Builder', icon: IconLayers, soon: true },
   { to: '/workflow', label: 'Workflow Builder', icon: IconFlow, soon: true },

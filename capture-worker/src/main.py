@@ -1,0 +1,131 @@
+"""API internal Capture Worker.
+
+Worker berjalan sebagai proses TERPISAH dari backend. Hanya listen di 127.0.0.1
+dan hanya menerima request yang membawa token internal.
+
+TIDAK ADA endpoint untuk mengisi form login, menyimpan kredensial, atau
+menjalankan skrip aplikasi sumber.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import FastAPI, Header, HTTPException
+from pydantic import BaseModel, Field
+
+import masking
+from browser import CaptureError, manager
+from config import settings
+
+
+class StartRequest(BaseModel):
+    url: str
+    viewport_width: int | None = None
+    viewport_height: int | None = None
+    allowed_hosts: list[str] = Field(default_factory=list)
+
+
+class CaptureRequest(BaseModel):
+    label: str = "screen"
+    full_page: bool = False
+    relative_dir: str = "captures"
+
+
+app = FastAPI(title="NigmaSim Capture Worker (internal)", docs_url=None, redoc_url=None)
+
+
+def _check_token(x_worker_token: str | None) -> None:
+    if not x_worker_token or x_worker_token != settings.capture_worker_token:
+        raise HTTPException(status_code=401, detail="Token worker tidak valid")
+
+
+@app.get("/health")
+def health() -> dict[str, Any]:
+    return {"status": "ok", "role": "capture-worker", "headless": settings.headless}
+
+
+@app.post("/session/start")
+def start(payload: StartRequest, x_worker_token: str | None = Header(default=None)) -> dict[str, Any]:
+    _check_token(x_worker_token)
+    try:
+        session = manager.start(
+            payload.url,
+            viewport_width=payload.viewport_width,
+            viewport_height=payload.viewport_height,
+            allowed_hosts=payload.allowed_hosts,
+        )
+    except CaptureError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return session.as_dict()
+
+
+@app.post("/session/pause")
+def pause(x_worker_token: str | None = Header(default=None)) -> dict[str, Any]:
+    _check_token(x_worker_token)
+    try:
+        return manager.pause().as_dict()
+    except CaptureError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/session/resume")
+def resume(x_worker_token: str | None = Header(default=None)) -> dict[str, Any]:
+    _check_token(x_worker_token)
+    try:
+        return manager.resume().as_dict()
+    except CaptureError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/session/stop")
+def stop(x_worker_token: str | None = Header(default=None)) -> dict[str, Any]:
+    _check_token(x_worker_token)
+    try:
+        return manager.stop().as_dict()
+    except CaptureError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/session/state")
+def state(x_worker_token: str | None = Header(default=None)) -> dict[str, Any]:
+    _check_token(x_worker_token)
+    return manager.state()
+
+
+@app.post("/session/capture")
+def capture(
+    payload: CaptureRequest, x_worker_token: str | None = Header(default=None)
+) -> dict[str, Any]:
+    _check_token(x_worker_token)
+    try:
+        meta = manager.capture(
+            payload.label, full_page=payload.full_page, relative_dir=payload.relative_dir
+        )
+    except CaptureError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - error tak terduga dibungkus rapi
+        raise HTTPException(status_code=500, detail=f"Gagal mengambil screenshot: {exc}") from exc
+    return meta
+
+
+@app.post("/mask")
+def mask(
+    payload: dict[str, Any], x_worker_token: str | None = Header(default=None)
+) -> dict[str, Any]:
+    """Kembalikan versi gambar yang sudah disamarkan."""
+    _check_token(x_worker_token)
+    import base64
+
+    try:
+        raw = base64.b64decode(payload.get("image_base64", ""))
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=422, detail="Payload gambar tidak valid") from exc
+    boxes = payload.get("boxes") or []
+    return {"image_base64": base64.b64encode(masking.redact(raw, boxes)).decode("ascii")}
+
+
+if __name__ == "__main__":  # pragma: no cover
+    import uvicorn
+
+    uvicorn.run(app, host=settings.host, port=settings.port)

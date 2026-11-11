@@ -65,6 +65,40 @@ Dokumentasi API interaktif (hanya di development): http://127.0.0.1:8000/docs
 
 ---
 
+## 3b. Menjalankan Capture Worker (terminal terpisah)
+
+Worker adalah proses **terpisah** — backend tidak pernah menyentuh browser.
+
+```powershell
+cd C:\Users\Lenovo\nigmasim\capture-worker
+
+# sekali saja
+& "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe" -m venv .venv
+.\.venv\Scripts\python.exe -m pip install playwright==1.49.1 fastapi==0.115.6 `
+  "uvicorn[standard]==0.34.0" pydantic==2.10.4 pydantic-settings==2.7.0 `
+  pillow==11.0.0 httpx==0.28.1
+.\.venv\Scripts\python.exe -m playwright install chromium
+
+# jalankan dari folder src/
+cd src
+..\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8010
+```
+
+Cek worker:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8010/health
+# => @{ status = "ok"; role = "capture-worker"; headless = False }
+```
+
+Detail lengkap: `capture-worker/README.md`.
+
+> **Aplikasi contoh untuk mencoba:** `samples/sample-app/` (dashboard, tabel, form).
+> Jalankan dengan `python -m http.server 8099` lalu daftarkan sebagai aplikasi di
+> NigmaSim dengan URL `http://127.0.0.1:8099/index.html`.
+
+---
+
 ## 4. Menjalankan Frontend
 
 Terminal 2:

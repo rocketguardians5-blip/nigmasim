@@ -14,7 +14,13 @@ PROJECT_STATUSES = {"draft", "capturing", "building", "published", "archived"}
 
 
 def _validate_url(value: str) -> str:
-    """Hanya http/https, dan tolak host IP privat (mitigasi SSRF)."""
+    """Hanya http/https, dan tolak host IP privat (mitigasi SSRF).
+
+    Pengecualian hanya berlaku jika ALLOW_PRIVATE_HOSTS_IN_REGISTRY=true
+    (khusus development/testing lokal).
+    """
+    from app.core.config import settings
+
     parsed = urlparse(value)
     if parsed.scheme not in {"http", "https"}:
         raise ValueError("URL harus menggunakan http atau https")
@@ -26,6 +32,8 @@ def _validate_url(value: str) -> str:
     except ValueError:
         return value
     if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+        if settings.allow_private_hosts_in_registry:
+            return value
         raise ValueError("URL tidak boleh mengarah ke alamat jaringan internal")
     return value
 
