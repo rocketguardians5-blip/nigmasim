@@ -1,0 +1,39 @@
+#!/bin/sh
+# ---------------------------------------------------------------------------
+# NigmaSim - pre-commit guard
+#
+# Dokumen acuan proyek (master prompt + panduan developer) adalah SUMBER
+# KEBENARAN. File-file ini tidak boleh diubah lewat commit biasa.
+# Perubahan hanya sah bila dilakukan pemilik proyek di luar repo, lalu
+# di-copy ulang secara sadar.
+# ---------------------------------------------------------------------------
+
+protected_files="MASTER_PROMPT_NIGMASIM.md docs/Panduan-Developer-NigmaSim.pdf"
+
+staged=$(git diff --cached --name-only)
+failed=0
+
+for f in $protected_files; do
+  if echo "$staged" | grep -Fxq "$f"; then
+    echo ""
+    echo "============================================================"
+    echo " COMMIT DITOLAK: $f"
+    echo "============================================================"
+    echo " Dokumen ini adalah sumber kebenaran proyek NigmaSim."
+    echo " Isi dan strukturnya tidak boleh diubah."
+    echo ""
+    echo " Bila memang perlu diperbarui:"
+    echo "   1. Ambil versi resmi dari pemilik proyek"
+    echo "   2. Perbarui salinan di repo secara sadar"
+    echo "   3. Commit dengan pesan yang menjelaskan alasannya"
+    echo ""
+    echo " Untuk melewati guard ini (hanya bila memang disengaja):"
+    echo "   git commit --no-verify"
+    echo "============================================================"
+    echo ""
+    failed=1
+  fi
+done
+
+[ $failed -eq 0 ] || exit 1
+exit 0

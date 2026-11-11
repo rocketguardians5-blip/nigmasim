@@ -17,6 +17,37 @@ dan pembuatan SOP.
 `MASTER_PROMPT_NIGMASIM.md` di root repo adalah spesifikasi induk — **jangan pernah diubah**.
 Bila implementasi bertentangan dengan master prompt, master prompt yang menang.
 
+### Berkas yang dilindungi (jangan diubah)
+
+| Berkas | Peran |
+|---|---|
+| `MASTER_PROMPT_NIGMASIM.md` | spesifikasi induk (salinan verbatim dari file asli pemilik proyek) |
+| `docs/Panduan-Developer-NigmaSim.pdf` | panduan developer + master prompt (PDF asli) |
+
+Ada **pre-commit guard** (`.githooks/pre-commit`) yang memblokir commit yang menyentuh kedua
+berkas itu. Mengaktifkannya di clone baru:
+
+```powershell
+git config core.hooksPath .githooks
+```
+
+Kalau memang harus mengubahnya, ambil versi resmi dari pemilik proyek dulu, lalu commit
+sengaja dengan `--no-verify` dan jelaskan alasannya di pesan commit.
+
+### Skill UI/UX pihak ketiga
+
+Repo ini memang memakai skill desain (UI UX Pro Max) untuk tahap visual. Aturan mainnya:
+
+- **Hanya menyentuh `frontend/`.** Jangan pernah menyentuh `backend/`, `capture-worker/`,
+  `simulation-runtime/`, `storage/`, atau dokumen acuan.
+- **UI harus tetap sesuai master prompt §15**: enterprise modern, dark sidebar, clean
+  workspace, design system konsisten, responsif, indikator status yang jelas.
+- **Tampilan dikunci** oleh `design-system/nigmasim/MASTER.md`. Skill hanya melengkapi
+  detail dan memeriksa aturan — bukan menentukan gaya.
+- Dilarang: gradient, glassmorphism, neon, ungu/pink, radius > 8px, emoji sebagai icon.
+- **Dilarang** dipakai untuk rekonstruksi UI (Phase 3) — di sana kesetiaan visual ke
+  screenshot asli yang jadi Prioritas, bukan desain baru.
+
 Dokumen pendukung:
 
 | File | Isi |
