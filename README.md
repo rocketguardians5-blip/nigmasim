@@ -14,8 +14,31 @@ Platform mandiri untuk menangkap tampilan aplikasi web yang **telah diotorisasi*
 |---|---|
 | `MASTER_PROMPT_NIGMASIM.md` | Spesifikasi induk. **Tidak boleh diubah.** |
 | `docs/00-RENCANA-TEKNIS-PHASE1.md` | Rencana teknis Phase 1: arsitektur, ERD, API contract, threat model |
+| `docs/01-INSTALASI-DAN-MENJALANKAN.md` | Cara menjalankan di mesin development |
 
 Bila ada konflik antara implementasi dan master prompt, **master prompt menang**.
+
+---
+
+## Skill untuk AI assistant
+
+Repo ini sudah membawa skill OpenCode di `.opencode/skills/nigmasim-development/`:
+
+```
+.opencode/skills/nigmasim-development/
+├─ SKILL.md                      # konteks proyek, aturan keamanan, cara jalan & tes
+└─ references/status-phase.md    # status per fase & backlog
+```
+
+Skill ini membuat sesi baru (atau AI lain) langsung paham konteks proyek tanpa perlu
+penjelasan ulang: aturan keamanan yang tidak boleh dilanggar, struktur repo, perintah
+run/test, status tiap fase, dan backlog.
+
+Cara memakainya:
+
+- Di OpenCode: `@nigmasim-development` atau skill akan muncul sendiri saat relevan.
+- Untuk tim yang memakai tool lain: salin foldernya ke `.claude/skills/` atau `.agents/skills/`
+  di repo yang sama — formatnya sama.
 
 ---
 
