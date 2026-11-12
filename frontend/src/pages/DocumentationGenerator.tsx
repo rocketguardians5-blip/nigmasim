@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { applicationsApi, projectsApi, ApiError } from '../lib/api'
+import { applicationsApi, projectsApi, ApiError, downloadWithAuth } from '../lib/api'
 import type { Application, Project } from '../lib/api'
 import { simulationApi, tutorialApi } from '../lib/simulation'
 import type { SimulationDefinition, Tutorial } from '../lib/simulation'
@@ -16,7 +16,6 @@ import {
   PageHeader,
   Spinner,
 } from '../components/ui'
-import { IconExternal } from '../components/icons'
 
 const DOC_TYPES = [
   { value: 'sop', label: 'Standard Operating Procedure (SOP)' },
@@ -45,6 +44,7 @@ export function DocumentationGeneratorPage() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [tab, setTab] = useState<'preview' | 'isi' | 'markdown'>('preview')
+  const [downloading, setDownloading] = useState<'pdf' | 'md' | null>(null)
 
   useEffect(() => {
     void (async () => {
@@ -144,6 +144,29 @@ export function DocumentationGeneratorPage() {
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Gagal menerbitkan dokumen')
+    }
+  }
+
+  async function download(format: 'pdf' | 'md') {
+    if (!document) return
+    setDownloading(format)
+    setError(null)
+    try {
+      const safeTitle = document.title.replace(/[^a-zA-Z0-9-_ ]/g, '').trim() || 'dokumen'
+      await downloadWithAuth(
+        documentsApi.downloadUrl(document.id, format),
+        `${safeTitle}.${format}`,
+        format === 'pdf' ? 'application/pdf' : 'text/markdown',
+      )
+      setNotice(`Berkas ${format.toUpperCase()} berhasil diunduh.`)
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : 'Gagal mengunduh. Pastikan Capture Worker berjalan untuk PDF.',
+      )
+    } finally {
+      setDownloading(null)
     }
   }
 
@@ -384,22 +407,22 @@ export function DocumentationGeneratorPage() {
                       Publish
                     </Button>
                   )}
-                  <a
-                    href={`/api/v1${documentsApi.downloadUrl(document.id, 'pdf')}`}
-                    onClick={async (event) => {
-                      event.preventDefault()
-                      window.open(`/api/v1${documentsApi.downloadUrl(document.id, 'pdf')}`, '_blank')
-                    }}
-                    className="inline-flex h-8 items-center gap-1.5 rounded bg-brand-600 px-3 text-xs font-medium text-white hover:bg-brand-700"
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={downloading === 'pdf'}
+                    onClick={() => void download('pdf')}
                   >
-                    Unduh PDF <IconExternal size={12} />
-                  </a>
-                  <a
-                    href={`/api/v1${documentsApi.downloadUrl(document.id, 'md')}`}
-                    className="inline-flex h-8 items-center rounded border border-slate-300 bg-white px-3 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                    Unduh PDF
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={downloading === 'md'}
+                    onClick={() => void download('md')}
                   >
                     Markdown
-                  </a>
+                  </Button>
                 </div>
               </div>
             )}

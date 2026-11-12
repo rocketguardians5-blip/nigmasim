@@ -216,6 +216,36 @@ export async function fetchBlobUrl(path: string): Promise<string> {
   return URL.createObjectURL(blob)
 }
 
+/**
+ * Unduh berkas dari API dengan header autentikasi, lalu simpan ke komputer.
+ * Wajib dipakai untuk endpoint yang butuh token (mis. unduh PDF/Markdown).
+ */
+export async function downloadWithAuth(
+  path: string,
+  filename: string,
+  mime = 'application/octet-stream',
+): Promise<void> {
+  const headers: Record<string, string> = {}
+  const access = tokenStore.access
+  if (access) headers.Authorization = `Bearer ${access}`
+
+  const response = await fetch(`${BASE}${path}`, { headers })
+  if (!response.ok) {
+    throw new Error(`Gagal mengunduh berkas (${response.status})`)
+  }
+
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.type = mime
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 2000)
+}
+
 /* ---------- Endpoint spesifik ---------- */
 
 export const authApi = {
