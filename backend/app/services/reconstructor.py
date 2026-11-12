@@ -64,6 +64,92 @@ def _box(element: ScreenElement) -> dict[str, int] | None:
         return None
 
 
+def _build_sections(
+    items: list[dict[str, Any]], viewport: dict[str, int]
+) -> list[dict[str, Any]]:
+    """Kelompokkan elemen menjadi section (baris horizontal).
+
+    Aturan: elemen masuk ke section yang sama kalau jaraknya vertikal dekat.
+    Elemen yang jauh lebih tinggi dari section dianggap section baru.
+    Hasilnya: blueprint per section (header, hero, baris fitur, dst) - jauh
+    lebih terbaca daripada menumpuk kotak per elemen.
+    """
+    if not items:
+        return []
+
+    width = max(viewport.get("width", 1440), 1)
+    ordered = sorted(items, key=lambda item: item["box"]["y"])
+
+    bands: list[dict[str, Any]] = []
+    for item in ordered:
+        box = item["box"]
+        placed = False
+        for band in bands:
+            gap_top = box["y"] - band["bottom"]
+            too_tall = box["h"] > band["height"] * 1.8 and gap_top > 24
+            if gap_top <= 48 and not too_tall:
+                band["items"].append(item)
+                band["bottom"] = max(band["bottom"], box["y"] + box["h"])
+                band["height"] = band["bottom"] - band["top"]
+                placed = True
+                break
+        if not placed:
+            bands.append(
+                {
+                    "top": box["y"],
+                    "bottom": box["y"] + box["h"],
+                    "height": box["h"],
+                    "items": [item],
+                }
+            )
+
+    sections: list[dict[str, Any]] = []
+    for index, band in enumerate(bands):
+        types: list[str] = []
+        for item in band["items"]:
+            if item["type"] not in types:
+                types.append(item["type"])
+        left = min(item["box"]["x"] for item in band["items"])
+        right = max(item["box"]["x"] + item["box"]["w"] for item in band["items"])
+        sections.append(
+            {
+                "index": index + 1,
+                "label": _section_label(types, index),
+                "types": types,
+                "top": band["top"],
+                "bottom": band["bottom"],
+                "height": band["height"],
+                "x": left,
+                "width": right - left,
+                "width_ratio": round((right - left) / width, 3),
+                "item_count": len(band["items"]),
+                "items": [
+                    {"type": item["type"], "label": item["label"]} for item in band["items"][:12]
+                ],
+            }
+        )
+    return sections
+
+
+def _section_label(types: list[str], index: int) -> str:
+    """Berikan nama yang bisa dibaca manusia untuk sebuah section."""
+    if "nav-item" in types:
+        return "Navigasi / Header"
+    if "heading" in types and index == 1:
+        return "Hero / Judul utama"
+    if "table" in types:
+        return "Tabel data"
+    if "form" in types or "field" in types:
+        return "Form input"
+    if "card" in types:
+        return "Kartu / statistik"
+    if "button" in types:
+        return "Tombol aksi"
+    if "image" in types:
+        return "Gambar"
+    return "Bagian " + str(index + 1)
+
+
 def analyze_screen(screen: Screen, elements: list[ScreenElement]) -> Analysis:
     """Analisis struktur halaman dari elemen & struktur semantik yang tertangkap."""
     result = Analysis()
@@ -238,6 +324,18 @@ def analyze_screen(screen: Screen, elements: list[ScreenElement]) -> Analysis:
     for index, component in enumerate(components):
         component["order_index"] = index
     result.components = components
+
+    # Blueprint per section - lebih terbaca daripada menumpuk kotak per elemen.
+    boxed = [
+        {
+            "type": component["component_type"],
+            "label": component.get("label"),
+            "box": (component.get("props") or {}).get("box"),
+        }
+        for component in components
+        if (component.get("props") or {}).get("box")
+    ]
+    result.layout = {**result.layout, "sections": _build_sections(boxed, viewport)}
 
     # ---------- Asumsi yang WAJIB dicek manusia ----------
     assumptions: list[dict[str, Any]] = []

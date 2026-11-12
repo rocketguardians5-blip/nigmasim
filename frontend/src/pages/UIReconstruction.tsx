@@ -87,6 +87,8 @@ export function UIReconstructionPage() {
     try {
       const page = await screensApi.list(projectId, { latest_only: true })
       setScreens(page.items)
+      // Layar pertama langsung dipilih supaya tidak perlu klik lagi.
+      setScreenId((current) => current ?? page.items[0]?.id ?? null)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Gagal memuat daftar layar')
     }
@@ -476,62 +478,83 @@ export function UIReconstructionPage() {
 function Wireframe({ draft }: { draft: Reconstruction }) {
   const viewport = draft.layout?.viewport ?? { width: 1440, height: 900 }
   const regions = draft.layout?.regions ?? {}
+  const sections = (draft.layout as { sections?: DraftSection[] } | null)?.sections ?? []
   const vw = viewport.width || 1440
   const vh = viewport.height || 900
 
-  const box = (
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-  ): React.CSSProperties => ({
-    left: `${(x / vw) * 100}%`,
-    top: `${(y / vh) * 100}%`,
-    width: `${(w / vw) * 100}%`,
-    height: `${(h / vh) * 100}%`,
-  })
+  const pct = (value: number, total: number) => `${(value / total) * 100}%`
 
   return (
-    <div className="relative w-full overflow-hidden rounded border border-slate-200 bg-white" style={{ aspectRatio: `${vw} / ${vh}` }}>
+    <div
+      className="relative w-full overflow-hidden rounded border border-slate-200 bg-slate-50"
+      style={{ aspectRatio: `${vw} / ${vh}` }}
+    >
+      {/* Area sidebar bila terdeteksi */}
       {regions.sidebar && (
         <div
-          className="absolute bg-ink-900/90"
-          style={box(regions.sidebar.x, regions.sidebar.y, regions.sidebar.w, regions.sidebar.h)}
+          className="absolute top-0 bg-ink-900/90"
+          style={{
+            left: 0,
+            width: pct(regions.sidebar.w, vw),
+            height: '100%',
+          }}
         >
-          <span className="absolute left-1.5 top-1.5 text-[10px] font-medium text-white/70">
+          <span className="absolute left-1.5 top-1.5 text-[9px] font-medium text-white/70">
             sidebar
           </span>
         </div>
       )}
-      {regions.header && (
+
+      {/* Blueprint per section */}
+      {sections.map((section) => (
         <div
-          className="absolute bg-slate-200"
-          style={box(regions.header.x, regions.header.y, regions.header.w, regions.header.h)}
+          key={section.index}
+          className="absolute rounded border border-dashed border-slate-300 bg-white/80"
+          style={{
+            left: pct(section.x, vw),
+            top: pct(section.top, vh),
+            width: pct(section.width, vw),
+            height: pct(Math.max(section.height, 24), vh),
+            minWidth: 90,
+          }}
         >
-          <span className="absolute left-1.5 top-1.5 text-[10px] font-medium text-slate-600">
-            header
+          <span className="absolute -top-[9px] left-1.5 rounded bg-slate-800 px-1.5 py-0.5 text-[9px] font-medium text-white">
+            {section.index}. {section.label}
           </span>
+          <div className="flex flex-wrap gap-1 p-1.5">
+            {section.types.map((type) => (
+              <span
+                key={type}
+                className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[9px] text-slate-600"
+              >
+                {type}
+                <span className="ml-1 text-slate-400">×{countOf(section.items, type)}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {sections.length === 0 && (
+        <div className="grid h-full place-items-center text-xs text-slate-400">
+          Belum ada struktur yang bisa digambar
         </div>
       )}
-
-      {draft.components
-        .filter((component) => component.props?.box)
-        .map((component) => {
-          const b = component.props!.box!
-          return (
-            <div
-              key={component.id}
-              className={cn(
-                'absolute overflow-hidden rounded-sm border px-1 py-0.5 text-[9px] leading-tight',
-                COMPONENT_COLOR[component.component_type] ?? 'border-slate-300 bg-slate-50 text-slate-700',
-              )}
-              style={box(b.x, b.y, b.w, b.h)}
-            >
-              <span className="font-medium">{component.component_type}</span>
-              {component.label && <span className="ml-1 opacity-80">{component.label}</span>}
-            </div>
-          )
-        })}
     </div>
   )
+}
+
+interface DraftSection {
+  index: number
+  label: string
+  types: string[]
+  top: number
+  height: number
+  x: number
+  width: number
+  items: { type: string; label: string | null }[]
+}
+
+function countOf(items: { type: string }[], type: string): number {
+  return items.filter((item) => item.type === type).length
 }
