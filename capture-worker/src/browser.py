@@ -113,6 +113,7 @@ INIT_SCRIPT = """
 """
 
 # Skrip untuk mengambil metadata elemen interaktif. Tidak mengembalikan HTML.
+# Hanya label & tag semantik — TIDAK pernah innerHTML/outerHTML.
 EXTRACT_ELEMENTS = """
 (limit) => {
   const pick = (el) => {
@@ -142,6 +143,78 @@ EXTRACT_ELEMENTS = """
     if (out.length >= limit) break;
   }
   return out;
+}
+"""
+
+# Struktur semantik halaman - dipakai mesin rekonstruksi (Phase 3).
+# Hanya BENTUK & TEKS yang sudah terlihat. Tidak ada HTML, tidak ada nilai input.
+EXTRACT_STRUCTURE = """
+() => {
+  const rectOf = (el) => {
+    const r = el.getBoundingClientRect();
+    return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
+  };
+  const textOf = (el) => {
+    const t = (el.innerText || '').trim().split('\\n')[0] || '';
+    return t.length < 80 ? t : t.slice(0, 80);
+  };
+
+  const tables = Array.from(document.querySelectorAll('table')).map((el) => {
+    const rows = el.querySelectorAll('tr');
+    const headerCells = rows[0] ? rows[0].querySelectorAll('th, td').length : 0;
+    const columns = headerCells || (rows[0] ? rows[0].querySelectorAll('td').length : 0);
+    return {
+      type: 'table',
+      label: textOf(el) || 'Tabel',
+      headers: Array.from((rows[0] || el).querySelectorAll('th, td')).map((c) => textOf(c)).filter(Boolean).slice(0, 12),
+      row_count: Math.max(0, rows.length - 1),
+      column_count: columns,
+      box: rectOf(el),
+    };
+  });
+
+  const headings = Array.from(document.querySelectorAll('h1, h2, h3')).map((el) => ({
+    type: 'heading',
+    label: textOf(el),
+    level: Number(el.tagName.slice(1)),
+    box: rectOf(el),
+  })).filter((h) => h.label);
+
+  const forms = Array.from(document.querySelectorAll('form')).map((el) => ({
+    type: 'form',
+    label: textOf(el) || 'Form',
+    field_count: el.querySelectorAll('input, select, textarea').length,
+    box: rectOf(el),
+  }));
+
+  const navs = Array.from(document.querySelectorAll('nav')).map((el) => ({
+    type: 'nav',
+    label: textOf(el) || 'Navigasi',
+    item_count: el.querySelectorAll('a, button').length,
+    box: rectOf(el),
+  }));
+
+  const cards = Array.from(document.querySelectorAll(
+    '[class*="card"], [class*="panel"], article, section'
+  )).filter((el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 120 && r.height > 60 && r.width < 1400 && r.height < 700;
+  }).slice(0, 40).map((el) => ({
+    type: 'card',
+    label: textOf(el) || null,
+    box: rectOf(el),
+  }));
+
+  const images = Array.from(document.querySelectorAll('img')).filter((el) => {
+    const r = el.getBoundingClientRect();
+    return r.width >= 80 && r.height >= 60;
+  }).slice(0, 20).map((el) => ({
+    type: 'image',
+    label: el.getAttribute('alt') || null,
+    box: rectOf(el),
+  }));
+
+  return { tables, headings, forms, navs, cards, images };
 }
 """
 
@@ -268,6 +341,7 @@ class BrowserManager:
         page.bring_to_front()
 
         elements = page.evaluate(EXTRACT_ELEMENTS, settings.max_elements_per_page)
+        structure = page.evaluate(EXTRACT_STRUCTURE)
         page_events = page.evaluate("() => (window.__nigmasim && window.__nigmasim.events) || []")
         page.evaluate("() => { if (window.__nigmasim) window.__nigmasim.events = []; }")
 
@@ -304,6 +378,7 @@ class BrowserManager:
             "file_path": str(file_path),
             "file_name": file_path.name,
             "elements": elements,
+            "structure": structure,
             "interactions": [e.as_dict() for e in self.session.events],
         }
         self.session.last_capture = {

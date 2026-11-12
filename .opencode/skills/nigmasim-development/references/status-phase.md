@@ -13,7 +13,7 @@ tumpang tindih — hanya batas fase 1–2 yang sedikit berbeda.
 |---|---|---|
 | 1 | Fondasi: setup, auth, user management, registry, skema DB | ✅ Selesai |
 | 2 | Capture Studio (Playwright, browser session, screenshot, rekam interaksi) + Screen Repository | 🟡 Versi capture, kategori/modul, relasi layar, peta navigasi selesai. Retensi/backup & ekspor daftar layar belum. |
-| 3 | UI Reconstruction: analisis layar, identifikasi komponen, draft React, perbandingan visual, koreksi manual | ❌ Belum |
+| 3 | UI Reconstruction: analisis layar, identifikasi komponen, draft React, perbandingan visual, koreksi manual | 🟡 Mesin analisis (rule-based) + halaman review. Plug-in model vision belum. |
 | 4 | Full Simulation: builder, navigasi, form, tabel, CRUD, dummy data engine, workflow engine | ❌ Belum |
 | 5 | Guided Walkthrough: tutorial builder, spotlight, tooltip, tutorial player | ❌ Belum |
 | 6 | Documentation: SOP generator, user manual, ekspor PDF/HTML/Markdown | ❌ Belum |
@@ -44,6 +44,23 @@ tumpang tindih — hanya batas fase 1–2 yang sedikit berbeda.
 | 2c | Relasi layar induk + peta navigasi | ✅ | `GET /projects/{id}/navigation-map` |
 | 2d | Perbandingan versi side-by-side di UI | ✅ | tombol bandingkan di detail screen |
 | 2e | Retensi/backup file screenshot & ekspor daftar layar (CSV/JSON) | ❌ | khusus MVP produksi |
+
+---
+
+## Rincian Phase 3 — UI Reconstruction (dalam pengerjaan)
+
+| Sprint | Isi | Status | Bukti |
+|---|---|---|---|
+| 3a | Worker merekam struktur semantik (tabel, heading, form, card, image) | ✅ | `EXTRACT_STRUCTURE` di capture-worker/src/browser.py |
+| 3b | Tabel rekonstruksi + komponen + asumsi (migrasi `2026_11_12_0003`) | ✅ | `app/models/reconstruction.py` |
+| 3c | Mesin analisis deterministik + generator kode React/TS | ✅ | `app/services/reconstructor.py` |
+| 3d | Endpoint: analyze, get, update code, edit komponen, resolve asumsi, review | ✅ | `app/api/v1/reconstruction.py` |
+| 3e | Halaman UI Reconstruction: asli vs wireframe, komponen, checklist asumsi, editor kode | ✅ | `frontend/src/pages/UIReconstruction.tsx` |
+| 3f | Plug-in model AI vision untuk analisis screenshot | ❌ | butuh API key + pilihan model |
+| 3g | Preview React langsung (render draf di iframe) | ❌ | Phase 4 |
+
+**Aturan penting Phase 3:** draf hanya bisa disetujui setelah SEMUA asumsi dicentang manusia
+(`409` kalau masih ada yang belum dicek). Edit kode mengembalikan status ke `draft`.
 
 ---
 

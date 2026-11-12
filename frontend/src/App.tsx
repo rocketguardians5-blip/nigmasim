@@ -10,6 +10,7 @@ import { UsersPage } from './pages/Users'
 import { PlaceholderPage } from './pages/Placeholder'
 import { CaptureStudioPage } from './pages/CaptureStudio'
 import { ScreenRepositoryPage } from './pages/ScreenRepository'
+import { UIReconstructionPage } from './pages/UIReconstruction'
 import { Spinner } from './components/ui'
 
 function RequireAuth({ children }: { children: ReactElement }) {
@@ -69,7 +70,7 @@ export function App() {
         <Route path="/users" element={<UsersPage />} />
         <Route path="/capture" element={<CaptureStudioPage />} />
         <Route path="/screens" element={<ScreenRepositoryPage />} />
-        <Route path="/reconstruction" element={<PlaceholderRoute />} />
+        <Route path="/reconstruction" element={<UIReconstructionPage />} />
         <Route path="/simulation" element={<PlaceholderRoute />} />
         <Route path="/workflow" element={<PlaceholderRoute />} />
         <Route path="/tutorial" element={<PlaceholderRoute />} />

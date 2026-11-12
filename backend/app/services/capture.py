@@ -143,6 +143,8 @@ def record_capture(
         full_page=bool(meta.get("full_page")),
         capture_version=version,
         category=None,
+        # Struktur semantik (tabel, heading, form, card) untuk mesin rekonstruksi.
+        structure=meta.get("structure"),
         tags=[],
         review_status="pending",
         captured_at=now_utc(),

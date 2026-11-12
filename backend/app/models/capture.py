@@ -70,6 +70,9 @@ class Screen(Base):
     capture_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     # Pengelompokan modul, mis. Dashboard / Project Risk / Risk Assessment
     category: Mapped[str | None] = mapped_column(String(60), index=True)
+    # Struktur semantik hasil analisis worker (tabel, heading, form, nav, card).
+    # Dipakai mesin rekonstruksi Phase 3. Tidak pernah berisi HTML.
+    structure: Mapped[dict | None] = mapped_column(JSON)
     # Relasi antar layar: layar ini muncul dari layar mana
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("screens.id"), index=True)
     tags: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)

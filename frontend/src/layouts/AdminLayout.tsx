@@ -35,7 +35,7 @@ const NAV: NavItem[] = [
   { to: '/applications', label: 'Application Registry', icon: IconApps },
   { to: '/capture', label: 'Capture Studio', icon: IconCamera },
   { to: '/screens', label: 'Screen Repository', icon: IconImages },
-  { to: '/reconstruction', label: 'UI Reconstruction', icon: IconWand, soon: true },
+  { to: '/reconstruction', label: 'UI Reconstruction', icon: IconWand },
   { to: '/simulation', label: 'Simulation Builder', icon: IconLayers, soon: true },
   { to: '/workflow', label: 'Workflow Builder', icon: IconFlow, soon: true },
   { to: '/tutorial', label: 'Tutorial Builder', icon: IconBook, soon: true },

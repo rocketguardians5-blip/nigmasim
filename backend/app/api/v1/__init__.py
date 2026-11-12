@@ -2,7 +2,15 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import applications, auth, capture, health, projects, users
+from app.api.v1 import (
+    applications,
+    auth,
+    capture,
+    health,
+    projects,
+    reconstruction,
+    users,
+)
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -11,3 +19,4 @@ api_router.include_router(users.router)
 api_router.include_router(applications.router)
 api_router.include_router(projects.router)
 api_router.include_router(capture.router)
+api_router.include_router(reconstruction.router)
