@@ -14,9 +14,9 @@ tumpang tindih — hanya batas fase 1–2 yang sedikit berbeda.
 | 1 | Fondasi: setup, auth, user management, registry, skema DB | ✅ Selesai |
 | 2 | Capture Studio (Playwright, browser session, screenshot, rekam interaksi) + Screen Repository | 🟡 Versi capture, kategori/modul, relasi layar, peta navigasi selesai. Retensi/backup & ekspor daftar layar belum. |
 | 3 | UI Reconstruction: analisis layar, identifikasi komponen, draft React, perbandingan visual, koreksi manual | 🟡 Mesin analisis (rule-based) + halaman review. Plug-in model vision belum. |
-| 4 | Full Simulation: builder, navigasi, form, tabel, CRUD, dummy data engine, workflow engine | ❌ Belum |
-| 5 | Guided Walkthrough: tutorial builder, spotlight, tooltip, tutorial player | ❌ Belum |
-| 6 | Documentation: SOP generator, user manual, ekspor PDF/HTML/Markdown | ❌ Belum |
+| 4 | Full Simulation: builder, navigasi, form, tabel, CRUD, dummy data engine, workflow engine | 🟢 |
+| 5 | Guided Walkthrough: tutorial builder, spotlight, tooltip, tutorial player | 🟢 |
+| 6 | Documentation: SOP generator, user manual, ekspor PDF/HTML/Markdown | 🟢 |
 | 7 | Publishing: public/private demo, password, masa berlaku, analytics | ❌ Belum |
 | 8 | QA: uji fungsional, visual, keamanan, offline, performa | 🟡 Partial |
 
@@ -58,6 +58,10 @@ tumpang tindih — hanya batas fase 1–2 yang sedikit berbeda.
 | 3e | Halaman UI Reconstruction: asli vs wireframe, komponen, checklist asumsi, editor kode | ✅ | `frontend/src/pages/UIReconstruction.tsx` |
 | 3f | Plug-in model AI vision untuk analisis screenshot | ❌ | butuh API key + pilihan model |
 | 3g | Preview React langsung (render draf di iframe) | ❌ | Phase 4 |
+
+**Fase 6 (Documentation Generator):** dokumen disusun dari layar + tutorial + alur workflow yang
+sudah direview; isi bisa disunting manusia sebelum publish; ekspor PDF (dirender Chromium di
+worker), HTML, dan Markdown; screenshot di-embed sebagai base64 supaya gambar tetap muncul di PDF.
 
 **Aturan penting Phase 3:** draf hanya bisa disetujui setelah SEMUA asumsi dicentang manusia
 (`409` kalau masih ada yang belum dicek). Edit kode mengembalikan status ke `draft`.
