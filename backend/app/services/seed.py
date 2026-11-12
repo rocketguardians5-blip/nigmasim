@@ -33,6 +33,8 @@ DEFAULT_ROLES: dict[str, dict[str, object]] = {
             "capture:read",
             "screens:read",
             "screens:write",
+            "simulation:read",
+            "simulation:write",
         ],
     },
     "capture_operator": {
@@ -44,6 +46,7 @@ DEFAULT_ROLES: dict[str, dict[str, object]] = {
             "capture:read",
             "screens:read",
             "screens:write",
+            "simulation:read",
         ],
     },
     "developer_reviewer": {
@@ -54,6 +57,9 @@ DEFAULT_ROLES: dict[str, dict[str, object]] = {
             "capture:read",
             "screens:read",
             "screens:review",
+            "simulation:read",
+            "simulation:write",
+            "simulation:review",
         ],
     },
     "demo_viewer": {
@@ -76,6 +82,10 @@ def seed(db: Session) -> None:
                     permissions=list(payload["permissions"]),  # type: ignore[arg-type]
                 )
             )
+            changed = True
+        elif list(existing.permissions or []) != list(payload["permissions"]):  # type: ignore[arg-type]
+            # Sinkronkan izin bila role bawaan berubah (mis. menambah modul baru).
+            existing.permissions = list(payload["permissions"])  # type: ignore[arg-type]
             changed = True
     if changed:
         db.flush()

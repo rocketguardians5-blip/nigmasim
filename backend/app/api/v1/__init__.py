@@ -9,6 +9,7 @@ from app.api.v1 import (
     health,
     projects,
     reconstruction,
+    simulation,
     users,
 )
 
@@ -20,3 +21,4 @@ api_router.include_router(applications.router)
 api_router.include_router(projects.router)
 api_router.include_router(capture.router)
 api_router.include_router(reconstruction.router)
+api_router.include_router(simulation.router)
