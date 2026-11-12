@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { cn } from '../components/ui'
@@ -15,6 +15,7 @@ import {
   IconLayers,
   IconLogout,
   IconMenu,
+  IconPanel,
   IconSettings,
   IconUsers,
   IconWand,
@@ -49,24 +50,37 @@ export function AdminLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState<boolean>(
+    () => localStorage.getItem('nigmasim.sidebar.collapsed') === '1',
+  )
+
+  useEffect(() => {
+    localStorage.setItem('nigmasim.sidebar.collapsed', collapsed ? '1' : '0')
+  }, [collapsed])
 
   async function handleLogout() {
     await logout()
     navigate('/login', { replace: true })
   }
 
-  const sidebar = (
+  const renderSidebar = (isCollapsed: boolean) => (
     <div className="flex h-full flex-col bg-ink-900">
-      <div className="flex items-center gap-2.5 border-b border-white/5 px-4 py-4">
+      <div
+        className={`flex items-center border-b border-white/5 ${
+          isCollapsed ? 'justify-center px-2 py-4' : 'gap-2.5 px-4 py-4'
+        }`}
+      >
         <img
           src="/brand/nigmagrid-logo.png"
           alt="Logo PT Nigmagrid Indo Nesia"
-          className="h-7 w-7 shrink-0"
+          className={isCollapsed ? 'h-6 w-6' : 'h-7 w-7'}
         />
-        <div className="min-w-0">
-          <p className="text-[13px] font-semibold leading-tight text-white">NigmaSim</p>
-          <p className="text-[11px] leading-tight text-slate-500">PT Nigmagrid Indo Nesia</p>
-        </div>
+        {!isCollapsed && (
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold leading-tight text-white">NigmaSim</p>
+            <p className="text-[11px] leading-tight text-slate-500">PT Nigmagrid Indo Nesia</p>
+          </div>
+        )}
       </div>
 
       <nav className="flex-1 space-y-px overflow-y-auto px-2.5 py-3">
@@ -77,10 +91,13 @@ export function AdminLayout() {
               key={item.to}
               to={item.to}
               end={item.end}
+              title={isCollapsed ? item.label : undefined}
+              aria-label={isCollapsed ? item.label : undefined}
               onClick={() => setMobileOpen(false)}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-2.5 rounded px-2.5 py-[7px] text-[13px] transition-colors duration-150',
+                  'flex items-center rounded text-[13px] transition-colors duration-150',
+                  isCollapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2.5 py-[7px]',
                   isActive
                     ? 'bg-white/[0.08] text-white'
                     : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200',
@@ -89,9 +106,21 @@ export function AdminLayout() {
             >
               {({ isActive }) => (
                 <>
-                  <Icon size={16} className={isActive ? 'text-brand-400' : 'text-slate-500'} />
-                  <span className="flex-1 truncate">{item.label}</span>
-                  {item.soon && <span className="text-[11px] text-slate-600">soon</span>}
+                  <span
+                    className={cn(
+                      'grid h-6 w-6 shrink-0 place-items-center rounded transition-colors',
+                      isActive && !isCollapsed && 'bg-white/[0.06]',
+                    )}
+                  >
+                    <Icon
+                      size={16}
+                      className={isActive ? 'text-brand-400' : 'text-slate-500'}
+                    />
+                  </span>
+                  {!isCollapsed && <span className="flex-1 truncate">{item.label}</span>}
+                  {!isCollapsed && item.soon && (
+                    <span className="text-[11px] text-slate-600">soon</span>
+                  )}
                 </>
               )}
             </NavLink>
@@ -100,24 +129,36 @@ export function AdminLayout() {
       </nav>
 
       <div className="border-t border-white/5 p-2.5">
-        <div className="mb-1 flex items-center gap-2.5 rounded px-2.5 py-2">
+        <div
+          className={cn(
+            'mb-1 flex items-center rounded',
+            isCollapsed ? 'justify-center py-1.5' : 'gap-2.5 px-2.5 py-2',
+          )}
+        >
           <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white/10 text-[11px] font-medium text-slate-200">
             {user?.name?.slice(0, 2).toUpperCase() ?? 'NA'}
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-medium leading-tight text-slate-100">
-              {user?.name}
-            </p>
-            <p className="truncate text-[11px] leading-tight text-slate-500">{user?.role.name}</p>
-          </div>
+          {!isCollapsed && (
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-medium leading-tight text-slate-100">
+                {user?.name}
+              </p>
+              <p className="truncate text-[11px] leading-tight text-slate-500">{user?.role.name}</p>
+            </div>
+          )}
         </div>
         <button
           type="button"
           onClick={handleLogout}
-          className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-left text-[13px] text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200"
+          title={isCollapsed ? 'Keluar' : undefined}
+          aria-label="Keluar"
+          className={cn(
+            'flex w-full items-center rounded text-left text-[13px] text-slate-400 transition-colors hover:bg-white/[0.04] hover:text-slate-200',
+            isCollapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-2.5 py-2',
+          )}
         >
-          <IconLogout size={16} className="text-slate-500" />
-          Keluar
+          <IconLogout size={16} className="shrink-0 text-slate-500" />
+          {!isCollapsed && 'Keluar'}
         </button>
       </div>
     </div>
@@ -125,11 +166,18 @@ export function AdminLayout() {
 
   return (
     <div className="flex h-full">
-      <aside className="hidden w-60 shrink-0 lg:block">{sidebar}</aside>
+      <aside
+        className={cn(
+          'hidden shrink-0 transition-[width] duration-200 ease-out lg:block',
+          collapsed ? 'w-16' : 'w-60',
+        )}
+      >
+        {renderSidebar(collapsed)}
+      </aside>
 
       {mobileOpen && (
         <div className="fixed inset-0 z-40 flex lg:hidden">
-          <div className="w-60">{sidebar}</div>
+          <div className="w-60">{renderSidebar(false)}</div>
           <button
             type="button"
             aria-label="Tutup menu"
@@ -141,6 +189,15 @@ export function AdminLayout() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 items-center gap-3 border-b border-slate-200 bg-white px-4 lg:px-6">
+          <button
+            type="button"
+            className="hidden rounded p-1.5 text-slate-500 transition-colors hover:bg-slate-100 lg:block"
+            onClick={() => setCollapsed((value) => !value)}
+            aria-label={collapsed ? 'Perlebar sidebar' : 'Ciutkan sidebar'}
+            title={collapsed ? 'Perlebar sidebar' : 'Ciutkan sidebar'}
+          >
+            <IconPanel size={18} />
+          </button>
           <button
             type="button"
             className="rounded p-1.5 text-slate-500 transition-colors hover:bg-slate-100 lg:hidden"

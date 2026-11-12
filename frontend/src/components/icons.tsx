@@ -188,6 +188,13 @@ export const IconMenu = ({ className, size }: IconProps) => (
   </svg>
 )
 
+export const IconPanel = ({ className, size }: IconProps) => (
+  <svg {...base(className, size)}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M9.5 4v16" />
+  </svg>
+)
+
 export const IconArrowLeft = ({ className, size }: IconProps) => (
   <svg {...base(className, size)}>
     <path d="M19 12H5M11 6l-6 6 6 6" />
