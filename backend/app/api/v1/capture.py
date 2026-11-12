@@ -25,9 +25,12 @@ from app.schemas.capture import (
     InteractionCreate,
     InteractionOut,
     InteractionUpdate,
+    NavigationNode,
     ReviewRequest,
+    ScreenCategory,
     ScreenOut,
     ScreenUpdate,
+    ScreenVersionOut,
 )
 from app.schemas.common import MessageResponse, Page
 from app.services import audit, capture as capture_service
@@ -275,6 +278,9 @@ def list_screens(
     search: str | None = Query(default=None, max_length=200),
     tag: str | None = Query(default=None, max_length=60),
     review_status: str | None = Query(default=None),
+    category: str | None = Query(default=None, max_length=60),
+    screen_key: str | None = Query(default=None, max_length=80),
+    latest_only: bool = Query(default=False, description="Hanya versi terbaru tiap layar"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=24, ge=1, le=100),
     _: User = Depends(require_permission("screens:read")),
@@ -292,11 +298,28 @@ def list_screens(
         )
     if review_status:
         stmt = stmt.where(Screen.review_status == review_status)
+    if category:
+        stmt = stmt.where(Screen.category == category)
+    if screen_key:
+        stmt = stmt.where(Screen.screen_key == screen_key)
 
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-    rows = db.scalars(
-        stmt.order_by(Screen.id.desc()).offset((page - 1) * page_size).limit(page_size)
-    ).all()
+    rows = list(
+        db.scalars(
+            stmt.order_by(Screen.screen_key, Screen.capture_version.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).all()
+    )
+
+    if latest_only:
+        latest: dict[str, Screen] = {}
+        for row in rows:
+            current = latest.get(row.screen_key)
+            if current is None or row.capture_version > current.capture_version:
+                latest[row.screen_key] = row
+        rows = list(latest.values())
+        total = len(rows)
 
     if tag:
         rows = [r for r in rows if tag in (r.tags or [])]
@@ -308,6 +331,90 @@ def list_screens(
         page_size=page_size,
         total=total,
     )
+
+
+@router.get("/projects/{project_id}/screen-categories", response_model=list[ScreenCategory])
+def list_categories(
+    project_id: int,
+    _: User = Depends(require_permission("screens:read")),
+    db: Session = Depends(get_db),
+) -> list[ScreenCategory]:
+    """Kategori/modul yang dipakai, beserta jumlah layarnya."""
+    rows = db.execute(
+        select(Screen.category, func.count(Screen.id))
+        .where(Screen.project_id == project_id, Screen.category.is_not(None))
+        .group_by(Screen.category)
+        .order_by(Screen.category)
+    ).all()
+    return [ScreenCategory(name=name or "Tanpa kategori", count=count) for name, count in rows]
+
+
+@router.get("/screens/{screen_id}/versions", response_model=list[ScreenVersionOut])
+def list_versions(
+    screen_id: int,
+    _: User = Depends(require_permission("screens:read")),
+    db: Session = Depends(get_db),
+) -> list[Screen]:
+    """Semua versi capture dari satu layar (versi terbaru di atas)."""
+    screen = db.get(Screen, screen_id)
+    if screen is None:
+        raise NotFoundError("Screen tidak ditemukan")
+    return list(
+        db.scalars(
+            select(Screen)
+            .where(
+                Screen.project_id == screen.project_id,
+                Screen.screen_key == screen.screen_key,
+            )
+            .order_by(Screen.capture_version.desc())
+        )
+    )
+
+
+@router.get("/projects/{project_id}/navigation-map", response_model=list[NavigationNode])
+def navigation_map(
+    project_id: int,
+    _: User = Depends(require_permission("screens:read")),
+    db: Session = Depends(get_db),
+) -> list[NavigationNode]:
+    """Peta relasi layar (dari layar mana user bisa sampai ke layar ini)."""
+    rows = list(
+        db.scalars(
+            select(Screen)
+            .where(Screen.project_id == project_id)
+            .order_by(Screen.screen_key, Screen.capture_version.desc())
+        )
+    )
+
+    # Hanya versi terbaru per layar.
+    latest: dict[str, Screen] = {}
+    for row in rows:
+        current = latest.get(row.screen_key)
+        if current is None or row.capture_version > current.capture_version:
+            latest[row.screen_key] = row
+    screens = list(latest.values())
+
+    children_map: dict[int | None, list[Screen]] = {}
+    for screen in screens:
+        children_map.setdefault(screen.parent_id, []).append(screen)
+
+    def build(parent_id: int | None) -> list[NavigationNode]:
+        nodes: list[NavigationNode] = []
+        for screen in children_map.get(parent_id, []):
+            nodes.append(
+                NavigationNode(
+                    id=screen.id,
+                    title=screen.title,
+                    screen_key=screen.screen_key,
+                    route_label=screen.route_label,
+                    capture_version=screen.capture_version,
+                    review_status=screen.review_status,
+                    children=build(screen.id),
+                )
+            )
+        return nodes
+
+    return build(None)
 
 
 @router.get("/screens/{screen_id}", response_model=ScreenOut)
@@ -341,6 +448,19 @@ def update_screen(
         )
     if "tags" in data and data["tags"] is not None:
         data["tags"] = [t.strip().lower()[:60] for t in data["tags"] if t and t.strip()][:12]
+    if "category" in data and data["category"] is not None:
+        data["category"] = data["category"].strip()[:60] or None
+    if "parent_screen_id" in data:
+        parent_id = data.pop("parent_screen_id")
+        if parent_id is not None:
+            parent = db.get(Screen, parent_id)
+            if parent is None:
+                raise NotFoundError("Layar induk tidak ditemukan")
+            if parent.id == screen.id:
+                raise ConflictError("Layar tidak bisa menjadi induk dirinya sendiri")
+            if parent.project_id != screen.project_id:
+                raise ConflictError("Layar induk harus dari project yang sama")
+        data["parent_id"] = parent_id
 
     for key, value in data.items():
         setattr(screen, key, value)
@@ -357,6 +477,63 @@ def update_screen(
     db.commit()
     db.refresh(screen)
     return screen
+
+
+@router.post("/screens/{screen_id}/recapture", response_model=ScreenOut, status_code=201)
+def recapture_screen(
+    screen_id: int,
+    request: Request,
+    operator: User = Depends(require_permission("capture:operate")),
+    db: Session = Depends(get_db),
+) -> Screen:
+    """Ambil ulang layar yang sama -> menjadi versi baru (bukan layar terpisah)."""
+    screen = db.get(Screen, screen_id)
+    if screen is None:
+        raise NotFoundError("Screen tidak ditemukan")
+
+    project = db.get(Project, screen.project_id)
+    if project is None:
+        raise NotFoundError("Project tidak ditemukan")
+
+    session = db.scalar(
+        select(CaptureSession)
+        .where(
+            CaptureSession.project_id == project.id,
+            CaptureSession.status.in_(["active", "running"]),
+        )
+        .order_by(CaptureSession.id.desc())
+    )
+    if session is None:
+        raise ConflictError(
+            "Tidak ada sesi capture yang aktif. Buka browser lewat Capture Studio lebih dulu."
+        )
+
+    relative_dir = f"captures/project-{project.id}/session-{session.id}"
+    try:
+        meta = capture_client.take_capture(screen.screen_key, screen.full_page, relative_dir)
+    except (WorkerUnavailableError, WorkerError) as exc:
+        raise _worker_or_503(exc) from exc
+
+    new_screen = capture_service.record_capture(
+        db, session, project, meta, title=screen.title
+    )
+    new_screen.screen_key = screen.screen_key
+    new_screen.category = screen.category
+    new_screen.parent_id = screen.parent_id
+    db.flush()
+
+    audit.record(
+        db,
+        actor_id=operator.id,
+        action="screen.recapture",
+        entity_type="screen",
+        entity_id=new_screen.id,
+        meta={"screen_key": screen.screen_key, "version": new_screen.capture_version},
+        ip_address=_ip(request),
+    )
+    db.commit()
+    db.refresh(new_screen)
+    return new_screen
 
 
 @router.post("/screens/{screen_id}/review", response_model=ScreenOut)

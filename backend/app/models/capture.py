@@ -47,7 +47,12 @@ class CaptureSession(Base):
 
 class Screen(Base):
     __tablename__ = "screens"
-    __table_args__ = (UniqueConstraint("project_id", "screen_key", name="uq_screen_project_key"),)
+    __table_args__ = (
+        # Satu "layar" bisa punya beberapa versi capture.
+        UniqueConstraint(
+            "project_id", "screen_key", "capture_version", name="uq_screen_project_key_version"
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(
@@ -56,13 +61,17 @@ class Screen(Base):
     capture_session_id: Mapped[int | None] = mapped_column(
         ForeignKey("capture_sessions.id"), index=True
     )
-    screen_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    screen_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     route_label: Mapped[str | None] = mapped_column(String(200))
     source_url: Mapped[str | None] = mapped_column(String(500))
     screenshot_path: Mapped[str] = mapped_column(String(500), nullable=False)
     full_page: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     capture_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    # Pengelompokan modul, mis. Dashboard / Project Risk / Risk Assessment
+    category: Mapped[str | None] = mapped_column(String(60), index=True)
+    # Relasi antar layar: layar ini muncul dari layar mana
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("screens.id"), index=True)
     tags: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     review_status: Mapped[str] = mapped_column(
         String(20), default="pending", nullable=False, index=True

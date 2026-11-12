@@ -12,7 +12,7 @@ tumpang tindih — hanya batas fase 1–2 yang sedikit berbeda.
 | Fase | Cakupan | Status |
 |---|---|---|
 | 1 | Fondasi: setup, auth, user management, registry, skema DB | ✅ Selesai |
-| 2 | Capture Studio (Playwright, browser session, screenshot, rekam interaksi) + Screen Repository | ❌ Belum |
+| 2 | Capture Studio (Playwright, browser session, screenshot, rekam interaksi) + Screen Repository | 🟡 Versi capture, kategori/modul, relasi layar, peta navigasi selesai. Retensi/backup & ekspor daftar layar belum. |
 | 3 | UI Reconstruction: analisis layar, identifikasi komponen, draft React, perbandingan visual, koreksi manual | ❌ Belum |
 | 4 | Full Simulation: builder, navigasi, form, tabel, CRUD, dummy data engine, workflow engine | ❌ Belum |
 | 5 | Guided Walkthrough: tutorial builder, spotlight, tooltip, tutorial player | ❌ Belum |
@@ -32,6 +32,18 @@ tumpang tindih — hanya batas fase 1–2 yang sedikit berbeda.
 | 1.4 | Capture Worker: Playwright + Chromium, sesi browser, screenshot, rekam interaksi | ✅ | Uji end-to-end: sample app → screenshot 1440×900 → 8 elemen terdeteksi |
 | 1.5 | Frontend admin | ✅ | Capture Studio & Screen Repository sudah berfungsi (bukan status lagi) |
 | 1.6 | Docker Compose, Nginx, dokumentasi operator | 🟳 | Dokumentasi ✅, Docker ❌ (ditunda: deployment adalah urusan pemilik proyek) |
+
+---
+
+## Rincian Phase 2 — Screen Repository
+
+| Sprint | Isi | Status | Bukti |
+|---|---|---|---|
+| 2a | Versi capture: recapture halaman yang sama jadi versi baru | ✅ | migrasi `2026_11_12_0002`; constraint (project, key, version) |
+| 2b | Kategori/modul + filter + tampilan per modul | ✅ | `GET /projects/{id}/screen-categories` |
+| 2c | Relasi layar induk + peta navigasi | ✅ | `GET /projects/{id}/navigation-map` |
+| 2d | Perbandingan versi side-by-side di UI | ✅ | tombol bandingkan di detail screen |
+| 2e | Retensi/backup file screenshot & ekspor daftar layar (CSV/JSON) | ❌ | khusus MVP produksi |
 
 ---
 

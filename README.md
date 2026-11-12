@@ -60,7 +60,7 @@ Detail lengkap: `MASTER_PROMPT_NIGMASIM.md` §13 dan `docs/00-RENCANA-TEKNIS-PHA
 | Phase | Status |
 |---|---|
 | 1 — Registry + Capture Studio | 🟢 Sprint 1.1–1.5 selesai: auth, user/role, registry, project, **Capture Worker Playwright**, Screen Repository, masking, review. |
-| 2 — Screen Repository | 🟡 Versi awal sudah ada (penyimpanan, tag, review, masking). Lanjut: versi capture, perbandingan layar, interaksi lanjutan. |
+| 2 — Screen Repository | 🟡 Versioning, kategori/modul, relasi layar, peta navigasi, perbandingan versi. Lanjut: retensi/backup & ekspor daftar layar. |
 | 3 — UI Reconstruction | ⬜ Belum |
 | 4 — Full Simulation | ⬜ Belum |
 | 5 — Workflow + Walkthrough | ⬜ Belum |

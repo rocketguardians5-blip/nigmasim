@@ -50,6 +50,8 @@ export interface Screen {
   screenshot_path: string
   full_page: boolean
   capture_version: number
+  category: string | null
+  parent_id: number | null
   tags: string[]
   review_status: 'pending' | 'approved' | 'rejected'
   reviewed_by: number | null
@@ -58,6 +60,31 @@ export interface Screen {
   captured_at: string
   created_at: string
   updated_at: string
+}
+
+export interface ScreenVersion {
+  id: number
+  screen_key: string
+  title: string
+  capture_version: number
+  review_status: string
+  captured_at: string
+  source_url: string | null
+}
+
+export interface ScreenCategory {
+  name: string
+  count: number
+}
+
+export interface NavigationNode {
+  id: number
+  title: string
+  screen_key: string
+  route_label: string | null
+  capture_version: number
+  review_status: string
+  children: NavigationNode[]
 }
 
 export interface WorkerState {
@@ -87,15 +114,38 @@ export const captureApi = {
 }
 
 export const screensApi = {
-  list: (projectId: number, params: { search?: string; tag?: string; review_status?: string } = {}) => {
-    const query = new URLSearchParams({ page_size: '60' })
+  list: (
+    projectId: number,
+    params: {
+      search?: string
+      tag?: string
+      review_status?: string
+      category?: string
+      latest_only?: boolean
+    } = {},
+  ) => {
+    const query = new URLSearchParams({ page_size: '100' })
     if (params.search) query.set('search', params.search)
     if (params.tag) query.set('tag', params.tag)
     if (params.review_status) query.set('review_status', params.review_status)
+    if (params.category) query.set('category', params.category)
+    if (params.latest_only) query.set('latest_only', 'true')
     return api.get<{ items: Screen[]; total: number }>(`/projects/${projectId}/screens?${query.toString()}`)
   },
-  update: (screenId: number, body: Partial<Pick<Screen, 'title' | 'tags' | 'notes' | 'route_label'>>) =>
-    api.patch<Screen>(`/screens/${screenId}`, body),
+  categories: (projectId: number) =>
+    api.get<ScreenCategory[]>(`/projects/${projectId}/screen-categories`),
+  versions: (screenId: number) => api.get<ScreenVersion[]>(`/screens/${screenId}/versions`),
+  navigationMap: (projectId: number) =>
+    api.get<NavigationNode[]>(`/projects/${projectId}/navigation-map`),
+  recapture: (screenId: number) => api.post<Screen>(`/screens/${screenId}/recapture`),
+  update: (
+    screenId: number,
+    body: Partial<
+      Pick<Screen, 'title' | 'tags' | 'notes' | 'route_label' | 'category'> & {
+        parent_screen_id?: number | null
+      }
+    >,
+  ) => api.patch<Screen>(`/screens/${screenId}`, body),
   review: (screenId: number, review_status: 'pending' | 'approved' | 'rejected', notes?: string) =>
     api.post<Screen>(`/screens/${screenId}/review`, { review_status, notes }),
   remove: (screenId: number) => api.delete<{ message: string }>(`/screens/${screenId}`),

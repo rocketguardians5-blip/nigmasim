@@ -97,18 +97,39 @@ def record_capture(
     *,
     title: str | None = None,
 ) -> Screen:
-    """Simpan hasil capture: screen + elemen + interaksi."""
+    """Simpan hasil capture: screen + elemen + interaksi.
+
+    Kalau halaman yang sama dicapture ulang, hasilnya menjadi **versi baru**
+    (capture_version naik) dengan screen_key yang sama — bukan screen terpisah.
+    Kalau judulnya sama tapi URL-nya berbeda, itu layar berbeda → key diberi akhiran.
+    """
     relative = _relative_path(str(meta.get("file_path", "")))
     source_url = meta.get("url")
     page_title = title or str(meta.get("title") or "Layar tanpa judul")[:200]
 
     base_key = slugify(page_title)
     key = base_key
-    counter = 1
-    while db.scalar(
-        select(Screen).where(Screen.project_id == project.id, Screen.screen_key == key)
-    ):
-        counter += 1
+    version = 1
+
+    existing = db.scalars(
+        select(Screen).where(Screen.project_id == project.id, Screen.screen_key == base_key)
+    ).all()
+    same_url = [s for s in existing if (s.source_url or "") == (source_url or "")]
+
+    if same_url:
+        # Halaman sama -> versi baru
+        version = max(s.capture_version for s in same_url) + 1
+    elif existing:
+        # Judul sama tapi URL berbeda -> layar berbeda
+        counter = 2
+        while db.scalar(
+            select(Screen).where(
+                Screen.project_id == project.id,
+                Screen.screen_key == f"{base_key}-{counter}",
+                Screen.capture_version == 1,
+            )
+        ):
+            counter += 1
         key = f"{base_key}-{counter}"
 
     screen = Screen(
@@ -120,7 +141,8 @@ def record_capture(
         source_url=source_url,
         screenshot_path=relative,
         full_page=bool(meta.get("full_page")),
-        capture_version=1,
+        capture_version=version,
+        category=None,
         tags=[],
         review_status="pending",
         captured_at=now_utc(),

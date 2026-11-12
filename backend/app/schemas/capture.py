@@ -34,6 +34,8 @@ class ScreenUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     screen_key: str | None = Field(default=None, min_length=1, max_length=80)
     route_label: str | None = Field(default=None, max_length=200)
+    category: str | None = Field(default=None, max_length=60)
+    parent_screen_id: int | None = None
     tags: list[str] | None = None
     notes: str | None = None
 
@@ -51,6 +53,8 @@ class ScreenOut(BaseModel):
     screenshot_path: str
     full_page: bool
     capture_version: int
+    category: str | None = None
+    parent_id: int | None = None
     tags: list[str] = []
     review_status: str
     reviewed_by: int | None = None
@@ -59,6 +63,42 @@ class ScreenOut(BaseModel):
     captured_at: datetime
     created_at: datetime
     updated_at: datetime
+
+
+class ScreenCategory(BaseModel):
+    name: str
+    count: int
+
+
+class ScreenVersionOut(BaseModel):
+    """Ringkasan satu versi capture - untuk perbandingan."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    screen_key: str
+    title: str
+    capture_version: int
+    review_status: str
+    captured_at: datetime
+    source_url: str | None = None
+
+
+class NavigationNode(BaseModel):
+    id: int
+    title: str
+    screen_key: str
+    route_label: str | None = None
+    capture_version: int
+    review_status: str
+    children: list["NavigationNode"] = []
+
+
+class ScreenComparison(BaseModel):
+    """Dua versi layar berdampingan untuk ditinjau manual."""
+
+    left: ScreenOut
+    right: ScreenOut
 
 
 class ReviewRequest(BaseModel):
@@ -121,3 +161,6 @@ class InteractionOut(BaseModel):
     target_element_id: int | None = None
     expected_result: str | None = None
     notes: str | None = None
+
+
+NavigationNode.model_rebuild()
