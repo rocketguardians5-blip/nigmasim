@@ -28,6 +28,23 @@ Ciri "tampak AI" yang dilarang:
 
 ---
 
+## Sidebar
+
+| Keadaan | Lebar | Isi |
+|---|---|---|
+| Terbuka | 240px | Logo + nama, 13 menu berlabel, nama pengguna, tombol Keluar |
+| Terlipat | 64px | Rail ikon saja (title + aria-label untuk hover & pembaca layar) |
+
+| Aturan | Keterangan |
+|---|---|
+| Tombol ciutkan | **Di dalam sidebar**, memak ikon chevron kiri, sebelah kanan nama produk |
+| Cara membuka | **Klik logo Nigmagrid** di rail ikon |
+| Status | Disimpan di `localStorage`, tetap sama setelah reload |
+| Mobile | Selalu overlay sidebar penuh, tidak terpengaruh mode terlipat |
+| Header admin | Tidak ada tombol panel — kendali sidebar menyatu di dalam sidebar |
+
+---
+
 ## Identitas merek
 
 Logo resmi: `frontend/public/brand/nigmagrid-logo.png` (600×600, latar transparan).
@@ -176,6 +193,10 @@ sales/presales. Boleh melanggar aturan radius karena ini permukaan presentasi, b
 | CTA utama | Solid `brand-600`, teks putih, **radius pill** (`rounded-full`), tinggi 44px |
 | CTA sekunder | Latar putih, border 1px `brand-600`, teks `brand-700`, **radius pill** |
 | Hero gambar | Radius besar (24–32px) boleh, `object-cover object-top`, label konteks menempel di bawah |
+| Hero putar otomatis | Berganti produk tiap **5 detik**, transisi crossfade 700ms + zoom halus 5% |
+| Jeda animasi | Otomatis berhenti saat kursor di area hero/rail, atau `prefers-reduced-motion` aktif |
+| Titik hero | Titik memanjang untuk slide aktif, bisa diklik untuk pindah manual |
+| Sinkronisasi | Rail produk mengikuti posisi hero (dan sebaliknya) |
 | Rail produk | `overflow-x-auto` + `snap-x snap-mandatory`, kartu 320–380px, scrollbar disembunyikan |
 | Interaksi rail | Bisa **diseret mouse/touch**, tombol panah, titik indikator, snap halus |
 | Indikator aktif | Titik memanjang (pill) saat slide aktif |

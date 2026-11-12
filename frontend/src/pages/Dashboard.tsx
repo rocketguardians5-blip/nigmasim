@@ -5,7 +5,7 @@ import type { Application, Project } from '../lib/api'
 import { screensApi } from '../lib/capture'
 import type { Screen } from '../lib/capture'
 import { useAuth } from '../lib/auth'
-import { Alert, Badge, Card, EmptyState, PageHeader, Spinner } from '../components/ui'
+import { Alert, Badge, Card, EmptyState, PageHeader, Spinner, cn } from '../components/ui'
 import { IconArrowLeft, IconExternal } from '../components/icons'
 
 interface Product {
@@ -36,6 +36,21 @@ export function DashboardPage() {
   const railRef = useRef<HTMLDivElement>(null)
   const dragState = useRef({ startX: 0, startScroll: 0, moved: false })
   const [dragging, setDragging] = useState(false)
+
+  // Produk yang punya screenshot -> dipakai untuk hero yang berputar
+  const heroProducts = useMemo(() => products.filter((p) => p.image), [products])
+  const [heroIndex, setHeroIndex] = useState(0)
+  const [heroPaused, setHeroPaused] = useState(false)
+
+  // Putar otomatis tiap 5 detik (berhenti saat kursor di area hero/rail)
+  useEffect(() => {
+    if (heroPaused || heroProducts.length < 2) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const timer = setInterval(() => {
+      setHeroIndex((index) => (index + 1) % heroProducts.length)
+    }, 5000)
+    return () => clearInterval(timer)
+  }, [heroPaused, heroProducts.length])
 
   useEffect(() => {
     let cancelled = false
@@ -126,7 +141,23 @@ export function DashboardPage() {
       }
     })
     setActiveIndex(closest)
-  }, [])
+    // Hero ikut mengikuti slide yang sedang terlihat
+    const current = products[closest]
+    if (current?.image) {
+      const heroPos = heroProducts.findIndex((p) => p.app.id === current.app.id)
+      if (heroPos >= 0) setHeroIndex(heroPos)
+    }
+  }, [products, heroProducts])
+
+  // Rail mengikuti hero saat hero berganti otomatis
+  useEffect(() => {
+    const el = railRef.current
+    const current = heroProducts[heroIndex]
+    if (!el || !current) return
+    const index = products.findIndex((p) => p.app.id === current.app.id)
+    const item = el.querySelectorAll<HTMLElement>('[data-rail-item]')[index]
+    if (item) el.scrollTo({ left: item.offsetLeft, behavior: 'smooth' })
+  }, [heroIndex, heroProducts, products])
 
   const stats = useMemo(
     () => [
@@ -143,8 +174,6 @@ export function DashboardPage() {
     ],
     [products],
   )
-
-  const hero = products.find((p) => p.image) ?? products[0]
 
   return (
     <div>
@@ -184,22 +213,64 @@ export function DashboardPage() {
             </p>
           </div>
 
-          <div className="relative">
-            <div className="aspect-[4/3] overflow-hidden rounded-[2rem] bg-slate-100">
-              {hero?.image ? (
-                <img src={hero.image} alt={hero.latest?.title ?? ''} className="h-full w-full object-cover object-top" />
-              ) : (
+          <div className="relative" onMouseEnter={() => setHeroPaused(true)} onMouseLeave={() => setHeroPaused(false)}>
+            <div className="relative aspect-[4/3] overflow-hidden rounded-[2rem] bg-slate-100">
+              {heroProducts.length === 0 ? (
                 <div className="grid h-full place-items-center text-xs text-slate-400">
                   Belum ada screenshot
                 </div>
+              ) : (
+                heroProducts.map((product, index) => (
+                  <img
+                    key={product.app.id}
+                    src={product.image}
+                    alt={product.latest?.title ?? product.app.name}
+                    className={cn(
+                      'absolute inset-0 h-full w-full object-cover object-top transition-all duration-700 ease-out',
+                      index === heroIndex ? 'opacity-100 scale-100' : 'opacity-0 scale-[1.05]',
+                    )}
+                  />
+                ))
+              )}
+
+              {heroProducts.length > 0 && (
+                <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2">
+                  <div className="relative min-w-0 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 backdrop-blur">
+                    {heroProducts.map((product, index) => (
+                      <div
+                        key={product.app.id}
+                        className={cn(
+                          'transition-opacity duration-500',
+                          index === heroIndex ? 'opacity-100' : 'absolute inset-0 opacity-0',
+                        )}
+                      >
+                        <p className="truncate text-xs font-medium text-slate-900">
+                          {product.latest?.title ?? product.app.name}
+                        </p>
+                        <p className="truncate text-[11px] text-slate-500">{product.app.name}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {heroProducts.length > 1 && (
+                    <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-white/90 px-2 py-1.5 backdrop-blur">
+                      {heroProducts.map((product, index) => (
+                        <button
+                          key={product.app.id}
+                          type="button"
+                          aria-label={`Tampilkan ${product.app.name}`}
+                          onClick={() => setHeroIndex(index)}
+                          className={cn(
+                            'h-1.5 rounded-full transition-all duration-300',
+                            index === heroIndex ? 'w-4 bg-slate-800' : 'w-1.5 bg-slate-400/70',
+                          )}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-            {hero?.latest && (
-              <div className="absolute bottom-3 left-3 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 backdrop-blur">
-                <p className="text-xs font-medium text-slate-900">{hero.latest.title}</p>
-                <p className="text-[11px] text-slate-500">{hero.app.name}</p>
-              </div>
-            )}
           </div>
         </div>
       </section>
@@ -256,6 +327,8 @@ export function DashboardPage() {
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
               onScroll={onRailScroll}
+              onMouseEnter={() => setHeroPaused(true)}
+              onMouseLeave={() => setHeroPaused(false)}
               className={`scrollbar-none flex snap-x snap-mandatory gap-4 overflow-x-auto pb-3 ${
                 dragging ? 'cursor-grabbing select-none' : 'cursor-grab'
               }`}

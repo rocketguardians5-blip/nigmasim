@@ -14,8 +14,8 @@ import {
   IconImages,
   IconLayers,
   IconLogout,
+  IconChevronLeft,
   IconMenu,
-  IconPanel,
   IconSettings,
   IconUsers,
   IconWand,
@@ -63,23 +63,47 @@ export function AdminLayout() {
     navigate('/login', { replace: true })
   }
 
-  const renderSidebar = (isCollapsed: boolean) => (
+  const renderSidebar = (isCollapsed: boolean, canCollapse: boolean) => (
     <div className="flex h-full flex-col bg-ink-900">
       <div
         className={`flex items-center border-b border-white/5 ${
-          isCollapsed ? 'justify-center px-2 py-4' : 'gap-2.5 px-4 py-4'
+          isCollapsed ? 'justify-center px-2 py-4' : 'gap-2.5 px-3 py-4'
         }`}
       >
-        <img
-          src="/brand/nigmagrid-logo.png"
-          alt="Logo PT Nigmagrid Indo Nesia"
-          className={isCollapsed ? 'h-6 w-6' : 'h-7 w-7'}
-        />
+        <button
+          type="button"
+          onClick={() => canCollapse && setCollapsed(false)}
+          title={canCollapse ? 'Perlebar sidebar' : undefined}
+          aria-label={canCollapse ? 'Perlebar sidebar' : undefined}
+          className={cn(
+            'shrink-0 rounded transition-opacity',
+            canCollapse ? 'cursor-pointer hover:opacity-80' : 'cursor-default',
+          )}
+        >
+          <img
+            src="/brand/nigmagrid-logo.png"
+            alt="Logo PT Nigmagrid Indo Nesia"
+            className={isCollapsed ? 'h-6 w-6' : 'h-7 w-7'}
+          />
+        </button>
         {!isCollapsed && (
-          <div className="min-w-0">
-            <p className="text-[13px] font-semibold leading-tight text-white">NigmaSim</p>
-            <p className="text-[11px] leading-tight text-slate-500">PT Nigmagrid Indo Nesia</p>
-          </div>
+          <>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-semibold leading-tight text-white">NigmaSim</p>
+              <p className="text-[11px] leading-tight text-slate-500">PT Nigmagrid Indo Nesia</p>
+            </div>
+            {canCollapse && (
+              <button
+                type="button"
+                onClick={() => setCollapsed(true)}
+                aria-label="Ciutkan sidebar"
+                title="Ciutkan sidebar"
+                className="grid h-7 w-7 shrink-0 place-items-center rounded text-slate-400 transition-colors hover:bg-white/[0.08] hover:text-white"
+              >
+                <IconChevronLeft size={16} />
+              </button>
+            )}
+          </>
         )}
       </div>
 
@@ -172,12 +196,12 @@ export function AdminLayout() {
           collapsed ? 'w-16' : 'w-60',
         )}
       >
-        {renderSidebar(collapsed)}
+        {renderSidebar(collapsed, true)}
       </aside>
 
       {mobileOpen && (
         <div className="fixed inset-0 z-40 flex lg:hidden">
-          <div className="w-60">{renderSidebar(false)}</div>
+          <div className="w-60">{renderSidebar(false, false)}</div>
           <button
             type="button"
             aria-label="Tutup menu"
@@ -189,15 +213,6 @@ export function AdminLayout() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 items-center gap-3 border-b border-slate-200 bg-white px-4 lg:px-6">
-          <button
-            type="button"
-            className="hidden rounded p-1.5 text-slate-500 transition-colors hover:bg-slate-100 lg:block"
-            onClick={() => setCollapsed((value) => !value)}
-            aria-label={collapsed ? 'Perlebar sidebar' : 'Ciutkan sidebar'}
-            title={collapsed ? 'Perlebar sidebar' : 'Ciutkan sidebar'}
-          >
-            <IconPanel size={18} />
-          </button>
           <button
             type="button"
             className="rounded p-1.5 text-slate-500 transition-colors hover:bg-slate-100 lg:hidden"
