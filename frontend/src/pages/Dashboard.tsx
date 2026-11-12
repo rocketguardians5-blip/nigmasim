@@ -188,45 +188,38 @@ export function DashboardPage() {
                   </button>
                 </>
               )}
+            </div>
 
-              {heroProducts.length > 0 && (
-                <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2">
-                  <div className="relative min-w-0 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 backdrop-blur">
+            {/* Keterangan produk DI BAWAH gambar - tidak menutupi screenshot */}
+            {heroProducts.length > 0 && (
+              <div className="mt-3 flex items-end justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-900">
+                    {heroProducts[heroIndex]?.latest?.title ?? heroProducts[heroIndex]?.app.name}
+                  </p>
+                  <p className="truncate text-xs text-slate-500">
+                    {heroProducts[heroIndex]?.app.name}
+                  </p>
+                </div>
+
+                {heroProducts.length > 1 && (
+                  <div className="flex shrink-0 items-center gap-1.5">
                     {heroProducts.map((product, index) => (
-                      <div
+                      <button
                         key={product.app.id}
+                        type="button"
+                        aria-label={`Tampilkan ${product.app.name}`}
+                        onClick={() => setHeroIndex(index)}
                         className={cn(
-                          'transition-opacity duration-500',
-                          index === heroIndex ? 'opacity-100' : 'absolute inset-0 opacity-0',
+                          'h-1.5 rounded-full transition-all duration-300',
+                          index === heroIndex ? 'w-4 bg-slate-800' : 'w-1.5 bg-slate-300',
                         )}
-                      >
-                        <p className="truncate text-xs font-medium text-slate-900">
-                          {product.latest?.title ?? product.app.name}
-                        </p>
-                        <p className="truncate text-[11px] text-slate-500">{product.app.name}</p>
-                      </div>
+                      />
                     ))}
                   </div>
-
-                  {heroProducts.length > 1 && (
-                    <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-white/90 px-2 py-1.5 backdrop-blur">
-                      {heroProducts.map((product, index) => (
-                        <button
-                          key={product.app.id}
-                          type="button"
-                          aria-label={`Tampilkan ${product.app.name}`}
-                          onClick={() => setHeroIndex(index)}
-                          className={cn(
-                            'h-1.5 rounded-full transition-all duration-300',
-                            index === heroIndex ? 'w-4 bg-slate-800' : 'w-1.5 bg-slate-400/70',
-                          )}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </section>
