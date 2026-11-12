@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sales Automation — Customer</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, "Segoe UI", system-ui, sans-serif; background: #f5f7fa; color: #0f172a; font-size: 14px; }
+      .layout { display: flex; min-height: 100vh; }
+      aside { width: 224px; background: #111827; color: #cbd5e1; padding: 20px 0; flex-shrink: 0; }
+      .brand { display: flex; align-items: center; gap: 10px; padding: 0 20px 20px; border-bottom: 1px solid #1f2937; }
+      .logo { width: 30px; height: 30px; border-radius: 5px; background: #0085CC; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 12px; }
+      .brand b { color: #fff; font-size: 14px; }
+      .brand span { display: block; color: #64748b; font-size: 11px; }
+      nav a { display: block; padding: 9px 20px; color: #cbd5e1; text-decoration: none; font-size: 13px; }
+      nav a.active { background: rgba(255,255,255,.07); color: #fff; border-left: 2px solid #0085CC; }
+      main { flex: 1; padding: 24px 28px; }
+      header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+      h1 { font-size: 19px; margin: 0; }
+      .muted { color: #64748b; font-size: 12px; }
+      .toolbar { display: flex; gap: 10px; margin-bottom: 14px; }
+      input, select { border: 1px solid #cbd5e1; border-radius: 5px; padding: 8px 10px; font-size: 13px; }
+      .panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      th { text-align: left; color: #64748b; font-weight: 500; font-size: 11px; padding: 10px 16px; border-bottom: 1px solid #e2e8f0; }
+      td { padding: 11px 16px; border-bottom: 1px solid #f1f5f9; }
+      .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; }
+      .aktif { background: #f0fdf4; color: #15803d; }
+      .nonaktif { background: #f1f5f9; color: #475569; }
+      button { background: #0077BA; color: #fff; border: 0; border-radius: 5px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <aside>
+        <div class="brand">
+          <div class="logo">SA</div>
+          <div><b>Sales Automation</b><span>Customer Management</span></div>
+        </div>
+        <nav>
+          <a href="customer.html" class="active">Customer</a>
+          <a href="customer.html">Order</a>
+          <a href="customer.html">Invoice</a>
+          <a href="customer.html">Report</a>
+          <a href="customer.html">Master Data</a>
+        </nav>
+      </aside>
+      <main>
+        <header>
+          <div>
+            <h1>Daftar Customer</h1>
+            <div class="muted">248 customer terdaftar</div>
+          </div>
+          <button>+ Tambah Customer</button>
+        </header>
+        <div class="toolbar">
+          <input placeholder="Cari customer…" style="width: 240px" />
+          <select style="width: 170px"><option>Semua Tipe</option><option>Reseller</option><option>Distributor</option><option>Retail</option></select>
+          <select style="width: 170px"><option>Semua Status</option><option>Aktif</option><option>Nonaktif</option></select>
+        </div>
+        <div class="panel">
+          <table>
+            <thead>
+              <tr><th>Customer ID</th><th>Nama Customer</th><th>Perusahaan</th><th>Tipe</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>CUS-2026-0221</td><td>Andi Pratama</td><td>PT Sinar Jaya Makmur</td><td>Distributor</td><td><span class="pill aktif">Aktif</span></td></tr>
+              <tr><td>CUS-2026-0220</td><td>Bunga Lestari</td><td>CV Karya Mandiri</td><td>Reseller</td><td><span class="pill aktif">Aktif</span></td></tr>
+              <tr><td>CUS-2026-0219</td><td>PT Samudera(lines</td><td>PT Samudera Biru</td><td>Distributor</td><td><span class="pill nonaktif">Nonaktif</span></td></tr>
+              <tr><td>CUS-2026-0218</td><td>Dedi Kurniawan</td><td>UD Sinar Abadi</td><td>Retail</td><td><span class="pill aktif">Aktif</span></td></tr>
+              <tr><td>CUS-2026-0217</td><td>Eka Wulandari</td><td>PTsolution Hera</td><td>Reseller</td><td><span class="pill nonaktif">Nonaktif</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>
