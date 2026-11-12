@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     applications,
     auth,
+    documents,
     capture,
     health,
     projects,
@@ -23,4 +24,5 @@ api_router.include_router(projects.router)
 api_router.include_router(capture.router)
 api_router.include_router(reconstruction.router)
 api_router.include_router(simulation.router)
+api_router.include_router(documents.router)
 api_router.include_router(workflow.router)

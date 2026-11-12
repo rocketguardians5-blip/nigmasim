@@ -125,6 +125,33 @@ def mask(
     return {"image_base64": base64.b64encode(masking.redact(raw, boxes)).decode("ascii")}
 
 
+@app.post("/document/pdf")
+def render_pdf(
+    payload: dict[str, Any], x_worker_token: str | None = Header(default=None)
+) -> dict[str, Any]:
+    """Render HTML menjadi PDF (dipakai untuk ekspor dokumen SOP)."""
+    _check_token(x_worker_token)
+    import base64
+
+    from playwright.sync_api import sync_playwright
+
+    html = str(payload.get("html") or "")
+    if not html:
+        raise HTTPException(status_code=422, detail="HTML kosong")
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.set_content(html, wait_until="networkidle")
+            pdf = page.pdf(format="A4", print_background=True, margin={"top": "18mm", "bottom": "18mm", "left": "16mm", "right": "16mm"})
+            browser.close()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"Gagal render PDF: {exc}") from exc
+
+    return {"pdf_base64": base64.b64encode(pdf).decode("ascii")}
+
+
 if __name__ == "__main__":  # pragma: no cover
     import uvicorn
 

@@ -35,6 +35,8 @@ DEFAULT_ROLES: dict[str, dict[str, object]] = {
             "screens:write",
             "simulation:read",
             "simulation:write",
+            "documents:read",
+            "documents:write",
         ],
     },
     "capture_operator": {
@@ -60,6 +62,9 @@ DEFAULT_ROLES: dict[str, dict[str, object]] = {
             "simulation:read",
             "simulation:write",
             "simulation:review",
+            "documents:read",
+            "documents:write",
+            "documents:review",
         ],
     },
     "demo_viewer": {

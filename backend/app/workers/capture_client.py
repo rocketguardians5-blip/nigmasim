@@ -29,9 +29,11 @@ def _client(timeout: float = 60.0) -> httpx.Client:
     )
 
 
-def _call(method: str, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+def _call(
+    method: str, path: str, payload: dict[str, Any] | None = None, timeout: float = 60.0
+) -> dict[str, Any]:
     try:
-        with _client() as client:
+        with _client(timeout) as client:
             response = client.request(method, path, json=payload)
     except httpx.HTTPError as exc:
         raise WorkerUnavailableError(
@@ -97,3 +99,17 @@ def take_capture(label: str, full_page: bool, relative_dir: str) -> dict[str, An
         "/session/capture",
         {"label": label, "full_page": full_page, "relative_dir": relative_dir},
     )
+
+
+def render_pdf(html: str, filename: str) -> str:
+    """Render HTML menjadi PDF memakai Chromium yang sudah terpasang.
+
+    Dipakai untuk ekspor dokumen SOP (Fase 6).
+    """
+    result = _call(
+        "POST",
+        "/document/pdf",
+        {"html": html, "filename": filename},
+        timeout=120.0,
+    )
+    return str(result.get("pdf_base64", ""))

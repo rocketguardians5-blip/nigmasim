@@ -39,7 +39,7 @@ const NAV: NavItem[] = [
   { to: '/simulation', label: 'Simulation Builder', icon: IconLayers },
   { to: '/workflow', label: 'Workflow Builder', icon: IconFlow },
   { to: '/tutorial', label: 'Tutorial Builder', icon: IconBook },
-  { to: '/documentation', label: 'Documentation Generator', icon: IconDoc, soon: true },
+  { to: '/documentation', label: 'Documentation Generator', icon: IconDoc },
   { to: '/demos', label: 'Published Demos', icon: IconGlobe, soon: true },
   { to: '/analytics', label: 'Analytics', icon: IconChart, soon: true },
   { to: '/users', label: 'User Management', icon: IconUsers },
