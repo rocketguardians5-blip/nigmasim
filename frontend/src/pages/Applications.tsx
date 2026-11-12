@@ -13,7 +13,7 @@ import {
   PageHeader,
   Spinner,
 } from '../components/ui'
-import { AuthorizationBadge } from './Dashboard'
+import { AuthorizationBadge } from '../components/StatusBadge'
 
 const EMPTY_FORM = {
   name: '',

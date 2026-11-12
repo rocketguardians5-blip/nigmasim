@@ -25,6 +25,15 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Scrollbar disembunyikan untuk rail horizontal (tetap bisa di-scroll & keyboard) */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

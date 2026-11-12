@@ -164,6 +164,32 @@ Selalu hormati `prefers-reduced-motion`.
 
 ---
 
+## Lapisan Showcase (Dashboard & Presentation Mode)
+
+Lapis atas halaman Dashboard, sekaligus dasar **Presentation Mode** (master prompt §7) untuk
+sales/presales. Boleh melanggar aturan radius karena ini permukaan presentasi, bukan alat kerja.
+
+| Elemen | Aturan |
+|---|---|
+| Hero headline | 30–36px, weight 600, `tracking-tight`, maksimal 2 baris |
+| Hero paragraf | 15px, line-height longgar, **tebalkan 1–2 frasa kunci** (bukan seluruh paragraf) |
+| CTA utama | Solid `brand-600`, teks putih, **radius pill** (`rounded-full`), tinggi 44px |
+| CTA sekunder | Latar putih, border 1px `brand-600`, teks `brand-700`, **radius pill** |
+| Hero gambar | Radius besar (24–32px) boleh, `object-cover object-top`, label konteks menempel di bawah |
+| Rail produk | `overflow-x-auto` + `snap-x snap-mandatory`, kartu 320–380px, scrollbar disembunyikan |
+| Interaksi rail | Bisa **diseret mouse/touch**, tombol panah, titik indikator, snap halus |
+| Indikator aktif | Titik memanjang (pill) saat slide aktif |
+| Hero + rail | Berisi konten nyata: screenshot aplikasi & statusnya, bukan gambar dekoratif |
+
+Aturan yang tetap berlaku di showcase: tanpa gradient, tanpa glassmorphism, satu warna aksen,
+hormati `prefers-reduced-motion`, dan jangan pakai gambar stok/placeholder yang tidak
+berkaitan dengan produk yang didemokan.
+
+> Prinsip: **tampilkan produk nyata.** Gambar di hero dan rail adalah screenshot aplikasi yang
+> benar-benar sudah tertangkap — bukan ilustrasi.
+
+---
+
 ## Proses
 
 1. Baca aturan di file ini **sebelum** menulis komponen.

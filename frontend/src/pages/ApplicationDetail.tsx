@@ -14,7 +14,7 @@ import {
   PageHeader,
   Spinner,
 } from '../components/ui'
-import { AuthorizationBadge } from './Dashboard'
+import { AuthorizationBadge } from '../components/StatusBadge'
 
 const PROJECT_STATUS: Record<string, { label: string; tone: 'neutral' | 'info' | 'success' | 'warning' }> = {
   draft: { label: 'Draft', tone: 'neutral' },
