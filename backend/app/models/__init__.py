@@ -2,7 +2,14 @@
 
 from app.db.session import Base
 from app.models.capture import AuditLog, CaptureSession, Interaction, Screen, ScreenElement
-from app.models.simulation import Simulation, SimulationDataset, SimulationScreen
+from app.models.simulation import (
+    Simulation,
+    SimulationDataset,
+    SimulationScreen,
+    SimulationTutorial,
+    SimulationWorkflow,
+    SimulationWorkflowRecord,
+)
 from app.models.reconstruction import (
     Reconstruction,
     ReconstructionAssumption,
@@ -23,6 +30,9 @@ __all__ = [
     "Simulation",
     "SimulationDataset",
     "SimulationScreen",
+    "SimulationTutorial",
+    "SimulationWorkflow",
+    "SimulationWorkflowRecord",
     "Reconstruction",
     "ReconstructionAssumption",
     "ReconstructionComponent",

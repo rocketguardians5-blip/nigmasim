@@ -13,6 +13,8 @@ import { ScreenRepositoryPage } from './pages/ScreenRepository'
 import { UIReconstructionPage } from './pages/UIReconstruction'
 import { SimulationBuilderPage } from './pages/SimulationBuilder'
 import { SimulationPlayerPage } from './pages/SimulationPlayer'
+import { WorkflowBuilderPage } from './pages/WorkflowBuilder'
+import { TutorialBuilderPage } from './pages/TutorialBuilder'
 import { Spinner } from './components/ui'
 
 function RequireAuth({ children }: { children: ReactElement }) {
@@ -83,8 +85,8 @@ export function App() {
         <Route path="/screens" element={<ScreenRepositoryPage />} />
         <Route path="/reconstruction" element={<UIReconstructionPage />} />
         <Route path="/simulation" element={<SimulationBuilderPage />} />`n        <Route path="/simulation/play/:projectId" element={<SimulationPlayerPage />} />
-        <Route path="/workflow" element={<PlaceholderRoute />} />
-        <Route path="/tutorial" element={<PlaceholderRoute />} />
+        <Route path="/workflow" element={<WorkflowBuilderPage />} />
+        <Route path="/tutorial" element={<TutorialBuilderPage />} />
         <Route path="/documentation" element={<PlaceholderRoute />} />
         <Route path="/demos" element={<PlaceholderRoute />} />
         <Route path="/analytics" element={<PlaceholderRoute />} />

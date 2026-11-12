@@ -71,3 +71,94 @@ export const simulationApi = {
   reset: (simulationId: number) =>
     api.post<{ message: string }>(`/simulation/${simulationId}/reset`),
 }
+
+/* ---------------- Workflow (alur approval) ---------------- */
+
+export interface WorkflowState {
+  key: string
+  label: string
+  role?: string
+}
+
+export interface WorkflowTransition {
+  from: string
+  to: string
+  action: string
+  label: string
+  role?: string
+}
+
+export interface WorkflowDefinition {
+  id: number
+  simulation_id: number
+  name: string
+  states: WorkflowState[]
+  transitions: WorkflowTransition[]
+  initial_state: string
+  state_field: string | null
+}
+
+export interface WorkflowRecord {
+  row_id: string
+  dataset: string
+  current_state: string
+  history: {
+    state: string
+    action: string
+    by: string
+    by_role: string
+    at: string
+    note?: string | null
+  }[]
+}
+
+export const workflowApi = {
+  get: (simulationId: number) => api.get<WorkflowDefinition>(`/simulation/${simulationId}/workflow`),
+  update: (simulationId: number, body: Partial<WorkflowDefinition>) =>
+    api.put<WorkflowDefinition>(`/simulation/${simulationId}/workflow`, body),
+  reset: (simulationId: number) =>
+    api.post<WorkflowDefinition>(`/simulation/${simulationId}/workflow/default`),
+  records: (simulationId: number, dataset?: string) =>
+    api.get<WorkflowRecord[]>(
+      `/simulation/${simulationId}/workflow/records${dataset ? `?dataset=${dataset}` : ''}`,
+    ),
+  transition: (
+    simulationId: number,
+    body: { dataset: string; row_id: string; action: string; role: string; note?: string },
+  ) =>
+    api.post<{ row_id: string; current_state: string; history: WorkflowRecord['history'] }>(
+      `/simulation/${simulationId}/workflow/transition`,
+      body,
+    ),
+  resetRecords: (simulationId: number) =>
+    api.post<{ message: string }>(`/simulation/${simulationId}/workflow/records/reset`),
+}
+
+/* ---------------- Tutorial (guided walkthrough) ---------------- */
+
+export interface TutorialStep {
+  no: number
+  screen: string | null
+  target: string | null
+  instruction: string
+  expected?: string | null
+}
+
+export interface Tutorial {
+  id: number
+  simulation_id: number
+  title: string
+  description: string | null
+  status: string
+  steps: TutorialStep[]
+}
+
+export const tutorialApi = {
+  list: (simulationId: number) => api.get<Tutorial[]>(`/simulation/${simulationId}/tutorials`),
+  create: (simulationId: number, body: { title: string; description?: string; steps: TutorialStep[] }) =>
+    api.post<Tutorial>(`/simulation/${simulationId}/tutorials`, body),
+  update: (simulationId: number, tutorialId: number, body: Partial<Tutorial>) =>
+    api.put<Tutorial>(`/simulation/${simulationId}/tutorials/${tutorialId}`, body),
+  remove: (simulationId: number, tutorialId: number) =>
+    api.delete<{ message: string }>(`/simulation/${simulationId}/tutorials/${tutorialId}`),
+}

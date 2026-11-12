@@ -18,7 +18,12 @@ from sqlalchemy.orm import Session
 from app.core.errors import ConflictError, NotFoundError
 from app.models.capture import Screen
 from app.models.reconstruction import Reconstruction
-from app.models.simulation import Simulation, SimulationDataset, SimulationScreen
+from app.models.simulation import (
+    Simulation,
+    SimulationDataset,
+    SimulationScreen,
+    SimulationWorkflow,
+)
 
 # Pola generik untuk membuat nilai dummy yang masuk akal.
 GENERATORS: list[tuple[str, str]] = [
@@ -260,6 +265,23 @@ def build_simulation(
                 seed=payload["rows"],
             )
         )
+
+    # Alur workflow standar dibuat otomatis supaya player langsung punya
+    # alur approval (Draft -> Submitted -> Approved) sejak awal.
+    from app.services import workflow as workflow_service
+
+    workflow_payload = workflow_service.default_workflow()
+    existing_workflow = db.scalar(
+        select(SimulationWorkflow).where(
+            SimulationWorkflow.simulation_id == simulation.id
+        )
+    )
+    if existing_workflow is not None:
+        # Rebuild: alur dikembalikan ke definisi standar.
+        for key, value in workflow_payload.items():
+            setattr(existing_workflow, key, value)
+    else:
+        db.add(SimulationWorkflow(simulation_id=simulation.id, **workflow_payload))
 
     db.flush()
     db.refresh(simulation)

@@ -11,6 +11,7 @@ from app.api.v1 import (
     reconstruction,
     simulation,
     users,
+    workflow,
 )
 
 api_router = APIRouter()
@@ -22,3 +23,4 @@ api_router.include_router(projects.router)
 api_router.include_router(capture.router)
 api_router.include_router(reconstruction.router)
 api_router.include_router(simulation.router)
+api_router.include_router(workflow.router)

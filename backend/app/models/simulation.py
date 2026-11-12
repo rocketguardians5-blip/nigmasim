@@ -76,3 +76,65 @@ class SimulationDataset(Base):
     seed: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
 
     simulation: Mapped[Simulation] = relationship(back_populates="datasets")
+
+
+class SimulationWorkflow(Base):
+    """Definisi alur status - contoh: Draft -> Submitted -> Approved."""
+
+    __tablename__ = "simulation_workflows"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    simulation_id: Mapped[int] = mapped_column(
+        ForeignKey("simulations.id"), nullable=False, unique=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    # Status: [{"key","label","role"}] - role = siapa yang boleh menjalankan
+    states: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    # Transisi: [{"from","to","action","label","role"}]
+    transitions: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    initial_state: Mapped[str] = mapped_column(String(40), default="draft", nullable=False)
+    # Kolom mana yang menyimpan status workflow (mis. "status")
+    state_field: Mapped[str | None] = mapped_column(String(60))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=now_utc, onupdate=now_utc, nullable=False
+    )
+
+
+class SimulationWorkflowRecord(Base):
+    """Status workflow + riwayat untuk satu baris data."""
+
+    __tablename__ = "simulation_workflow_records"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workflow_id: Mapped[int] = mapped_column(
+        ForeignKey("simulation_workflows.id"), nullable=False, index=True
+    )
+    dataset_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    row_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    current_state: Mapped[str] = mapped_column(String(40), nullable=False)
+    # Riwayat: [{"state","action","by","by_role","at","note"}]
+    history: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=now_utc, onupdate=now_utc, nullable=False
+    )
+
+
+class SimulationTutorial(Base):
+    """Tutorial langkah demi langkah (guided walkthrough)."""
+
+    __tablename__ = "simulation_tutorials"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    simulation_id: Mapped[int] = mapped_column(
+        ForeignKey("simulations.id"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(150), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="draft", nullable=False)
+    # Langkah: [{"no","screen","target","instruction","expected"}]
+    steps: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=now_utc, onupdate=now_utc, nullable=False
+    )
