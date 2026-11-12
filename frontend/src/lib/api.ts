@@ -5,7 +5,17 @@
  * sistem mencoba refresh sekali, lalu mengulang request.
  */
 
-const BASE: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api/v1'
+/**
+ * Basis URL API.
+ *
+ * Default = path relatif (/api/v1) supaya aplikasi bisa dibuka dari
+ * perangkat lain di WiFi yang sama: dari HP, "localhost" berarti HP itu
+ * sendiri. Path relatif ditangani proxy Vite ke backend lokal.
+ *
+ * Untuk build produksi, arahkan /api ke server yang sama (mis. Nginx).
+ * Override dengan VITE_API_BASE_URL bila perlu.
+ */
+const BASE: string = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
 
 export const API_BASE = BASE
 

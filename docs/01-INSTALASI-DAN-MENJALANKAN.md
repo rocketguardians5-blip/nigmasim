@@ -185,3 +185,74 @@ cd C:\Users\Lenovo\nigmasim\backend
 cd C:\Users\Lenovo\nigmasim\frontend
 npm run dev
 ```
+
+---
+
+## 9. Menjalankan di Perangkat Lain (WiFi yang Sama)
+
+Supaya NigmaSim bisa dibuka dari HP atau laptop lain di jaringan yang sama.
+
+### Cara cepat
+
+```powershell
+cd C:\Users\Lenovo\nigmasim
+.\scripts\dev-lan.ps1
+```
+
+Script itu menyalakan 3 service sekaligus dan menampilkan alamat yang harus dibuka, mis.
+`http://192.168.1.20:5173`.
+
+### Cara manual
+
+```powershell
+# Terminal 1 - backend (LOKAL saja, tidak dibuka ke jaringan)
+cd C:\Users\Lenovo\nigmasim\backend
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# Terminal 2 - capture worker (TETAP LOKAL)
+cd C:\Users\Lenovo\nigmasim\capture-worker\src
+..\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8010
+
+# Terminal 3 - frontend (SATU-SATUNYA yang dibuka ke jaringan)
+cd C:\Users\Lenovo\nigmasim\frontend
+npm run dev
+```
+
+> Backend **tidak perlu** dibuka ke LAN. Frontend Vite menjadi proxy `/api` ke
+> `127.0.0.1:8000`, jadi hanya port **5173** yang perlu diizinkan firewall.
+
+### Kenapa perlu proxy
+
+Frontend memakai path relatif `/api/v1`, bukan `http://localhost:8000`.
+Dari HP, `localhost` berarti **HP itu sendiri** - bukan komputer Anda.
+Proxy Vite meneruskan `/api/*` ke backend di `127.0.0.1:8000`.
+
+Override bila perlu (mis. backend di mesin lain) - buat file `frontend/.env`:
+
+```
+VITE_API_BASE_URL=http://192.168.1.20:8000/api/v1
+```
+
+### Firewall Windows
+
+Kalau perangkat lain tidak bisa terhubung, izinkan lewat firewall (PowerShell sebagai Admin):
+
+```powershell
+New-NetFirewallRule -DisplayName "NigmaSim Dev (5173)" -Direction Inbound `
+  -LocalPort 5173 -Protocol TCP -Action Allow -Profile Private
+```
+
+Cek alamat IP komputer Anda:
+
+```powershell
+ipconfig | Select-String "IPv4"
+```
+
+### Catatan keamanan
+
+- **Hanya port 5173 yang terbuka ke jaringan.** Backend API (8000) dan Capture Worker
+  (8010) tetap lokal - worker memegang browser & sesi login aplikasi sumber, jadi tidak
+  boleh terekspos.
+- Backend tetap butuh login & audit log. Jangan pakai akun admin di perangkat yang
+  tidak Anda percaya.
+- Ini mode development. Untuk demo ke klien, pakai domain terpisah + HTTPS (Fase 7).
