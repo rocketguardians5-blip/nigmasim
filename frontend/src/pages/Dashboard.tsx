@@ -108,7 +108,9 @@ export function DashboardPage() {
       {/* ---------- Hero ---------- */}
       <section className="mb-8 overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="grid items-center gap-8 p-6 md:grid-cols-[0.85fr_1.15fr] md:p-10">
-          <div className="max-w-xl">
+          {/* min-w-0: kolom grid harus boleh menyusut, kalau tidak halaman melebar
+              di layar HP dan konten terpotong di kanan. */}
+          <div className="min-w-0 max-w-xl">
             <Badge tone="info">Platform simulasi aplikasi</Badge>
             <h1 className="mt-4 text-3xl font-semibold leading-tight tracking-tight text-slate-900 md:text-4xl">
               Bangun demo produk
@@ -142,7 +144,7 @@ export function DashboardPage() {
           </div>
 
           <div
-            className="relative"
+            className="relative min-w-0"
             onMouseEnter={() => setHeroPaused(true)}
             onMouseLeave={() => setHeroPaused(false)}
           >
