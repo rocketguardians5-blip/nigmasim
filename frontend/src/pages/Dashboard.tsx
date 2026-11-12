@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { applicationsApi, projectsApi } from '../lib/api'
 import type { Application, Project } from '../lib/api'
@@ -6,7 +6,7 @@ import { screensApi } from '../lib/capture'
 import type { Screen } from '../lib/capture'
 import { useAuth } from '../lib/auth'
 import { Alert, Badge, Card, EmptyState, PageHeader, Spinner, cn } from '../components/ui'
-import { IconChevronLeft, IconChevronRight, IconExternal } from '../components/icons'
+import { IconChevronLeft, IconChevronRight } from '../components/icons'
 
 interface Product {
   app: Application
@@ -31,18 +31,13 @@ export function DashboardPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeIndex, setActiveIndex] = useState(0)
-
-  const railRef = useRef<HTMLDivElement>(null)
-  const dragState = useRef({ startX: 0, startScroll: 0, moved: false })
-  const [dragging, setDragging] = useState(false)
 
   // Produk yang punya screenshot -> dipakai untuk hero yang berputar
   const heroProducts = useMemo(() => products.filter((p) => p.image), [products])
   const [heroIndex, setHeroIndex] = useState(0)
   const [heroPaused, setHeroPaused] = useState(false)
 
-  // Putar otomatis tiap 5 detik (berhenti saat kursor di area hero/rail)
+  // Putar otomatis tiap 5 detik (berhenti saat kursor di area hero)
   useEffect(() => {
     if (heroPaused || heroProducts.length < 2) return
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
@@ -79,7 +74,7 @@ export function DashboardPage() {
         if (cancelled) return
         setProducts(list)
         setError(null)
-      } catch (err) {
+      } catch {
         if (!cancelled) setError('Gagal memuat data dashboard')
       } finally {
         if (!cancelled) setLoading(false)
@@ -91,73 +86,6 @@ export function DashboardPage() {
       cancelled = true
     }
   }, [])
-
-  /* ---------- Rail: drag + snap halus ---------- */
-
-  const scrollRail = useCallback((direction: 1 | -1) => {
-    const el = railRef.current
-    if (!el) return
-    const card = el.querySelector<HTMLElement>('[data-rail-item]')
-    const step = card ? card.offsetWidth + 16 : el.clientWidth * 0.8
-    el.scrollBy({ left: direction * step, behavior: 'smooth' })
-  }, [])
-
-  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    const el = railRef.current
-    if (!el) return
-    dragState.current = { startX: event.clientX, startScroll: el.scrollLeft, moved: false }
-    setDragging(true)
-    el.setPointerCapture(event.pointerId)
-  }
-
-  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const el = railRef.current
-    if (!el || !dragging) return
-    const delta = event.clientX - dragState.current.startX
-    if (Math.abs(delta) > 4) dragState.current.moved = true
-    el.scrollLeft = dragState.current.startScroll - delta
-  }
-
-  const onPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    const el = railRef.current
-    if (el?.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId)
-    setDragging(false)
-  }
-
-  // Tandai slide yang sedang terlihat (indeks aktif untuk titik navigasi)
-  const onRailScroll = useCallback(() => {
-    const el = railRef.current
-    if (!el) return
-    const items = [...el.querySelectorAll<HTMLElement>('[data-rail-item]')]
-    const center = el.scrollLeft + el.clientWidth / 2
-    let closest = 0
-    let best = Infinity
-    items.forEach((item, index) => {
-      const itemCenter = item.offsetLeft + item.offsetWidth / 2
-      const distance = Math.abs(itemCenter - center)
-      if (distance < best) {
-        best = distance
-        closest = index
-      }
-    })
-    setActiveIndex(closest)
-    // Hero ikut mengikuti slide yang sedang terlihat
-    const current = products[closest]
-    if (current?.image) {
-      const heroPos = heroProducts.findIndex((p) => p.app.id === current.app.id)
-      if (heroPos >= 0) setHeroIndex(heroPos)
-    }
-  }, [products, heroProducts])
-
-  // Rail mengikuti hero saat hero berganti otomatis
-  useEffect(() => {
-    const el = railRef.current
-    const current = heroProducts[heroIndex]
-    if (!el || !current) return
-    const index = products.findIndex((p) => p.app.id === current.app.id)
-    const item = el.querySelectorAll<HTMLElement>('[data-rail-item]')[index]
-    if (item) el.scrollTo({ left: item.offsetLeft, behavior: 'smooth' })
-  }, [heroIndex, heroProducts, products])
 
   const stats = useMemo(
     () => [
@@ -179,7 +107,7 @@ export function DashboardPage() {
     <div>
       {/* ---------- Hero ---------- */}
       <section className="mb-8 overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="grid items-center gap-6 p-6 md:grid-cols-[1.1fr_0.9fr] md:p-10">
+        <div className="grid items-center gap-8 p-6 md:grid-cols-[0.85fr_1.15fr] md:p-10">
           <div className="max-w-xl">
             <Badge tone="info">Platform simulasi aplikasi</Badge>
             <h1 className="mt-4 text-3xl font-semibold leading-tight tracking-tight text-slate-900 md:text-4xl">
@@ -213,8 +141,13 @@ export function DashboardPage() {
             </p>
           </div>
 
-          <div className="relative" onMouseEnter={() => setHeroPaused(true)} onMouseLeave={() => setHeroPaused(false)}>
-            <div className="relative aspect-[4/3] overflow-hidden rounded-[2rem] bg-slate-100">
+          <div
+            className="relative"
+            onMouseEnter={() => setHeroPaused(true)}
+            onMouseLeave={() => setHeroPaused(false)}
+          >
+            {/* Rasio 16:10 = rasio screenshot browser, jadi tidak ada yang terpotong */}
+            <div className="relative aspect-[16/10] overflow-hidden rounded-[2rem] bg-slate-100">
               {heroProducts.length === 0 ? (
                 <div className="grid h-full place-items-center text-xs text-slate-400">
                   Belum ada screenshot
@@ -238,7 +171,9 @@ export function DashboardPage() {
                   <button
                     type="button"
                     aria-label="Produk sebelumnya"
-                    onClick={() => setHeroIndex((index) => (index - 1 + heroProducts.length) % heroProducts.length)}
+                    onClick={() =>
+                      setHeroIndex((index) => (index - 1 + heroProducts.length) % heroProducts.length)
+                    }
                     className="absolute left-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-pop backdrop-blur transition-all duration-200 hover:bg-white hover:text-brand-700 active:scale-95"
                   >
                     <IconChevronLeft size={18} />
@@ -296,140 +231,7 @@ export function DashboardPage() {
         </div>
       </section>
 
-      {/* ---------- Rail produk ---------- */}
-      <section className="mb-8">
-        <div className="mb-3 flex items-end justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900">Produk yang bisa didemokan</h2>
-            <p className="mt-0.5 text-[13px] text-slate-500">
-              Geser ke samping untuk melihat semua aplikasi yang terdaftar.
-            </p>
-          </div>
-          <div className="hidden items-center gap-1 sm:flex">
-            <button
-              type="button"
-              aria-label="Geser ke kiri"
-              onClick={() => scrollRail(-1)}
-              className="grid h-8 w-8 place-items-center rounded-full border border-slate-300 bg-white text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-900"
-            >
-              <IconChevronLeft size={15} />
-            </button>
-            <button
-              type="button"
-              aria-label="Geser ke kanan"
-              onClick={() => scrollRail(1)}
-              className="grid h-8 w-8 place-items-center rounded-full border border-slate-300 bg-white text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-900"
-            >
-              <IconChevronRight size={15} />
-            </button>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="flex justify-center py-14">
-            <Spinner className="h-6 w-6 text-slate-300" />
-          </div>
-        ) : products.length === 0 ? (
-          <EmptyState
-            title="Belum ada aplikasi terdaftar"
-            description="Daftarkan aplikasi sumber yang sudah mendapat izin capture untuk memulai."
-            action={
-              <Link to="/applications" className="text-sm font-medium text-brand-600 hover:underline">
-                Buka Application Registry
-              </Link>
-            }
-          />
-        ) : (
-          <>
-            <div
-              ref={railRef}
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerCancel={onPointerUp}
-              onScroll={onRailScroll}
-              onMouseEnter={() => setHeroPaused(true)}
-              onMouseLeave={() => setHeroPaused(false)}
-              className={`scrollbar-none flex snap-x snap-mandatory gap-4 overflow-x-auto pb-3 ${
-                dragging ? 'cursor-grabbing select-none' : 'cursor-grab'
-              }`}
-              style={{ scrollBehavior: 'smooth' }}
-            >
-              {products.map((product) => (
-                <Link
-                  key={product.app.id}
-                  to={`/applications/${product.app.id}`}
-                  data-rail-item
-                  onClick={(event) => {
-                    if (dragState.current.moved) event.preventDefault()
-                  }}
-                  className="group w-[320px] shrink-0 snap-start overflow-hidden rounded-xl border border-slate-200 bg-white transition-colors hover:border-slate-300 sm:w-[380px]"
-                >
-                  <div className="aspect-[16/10] overflow-hidden bg-slate-100">
-                    {product.image ? (
-                      <img
-                        src={product.image}
-                        alt={product.latest?.title ?? product.app.name}
-                        className="h-full w-full object-cover object-top transition-transform duration-300 group-hover:scale-[1.02]"
-                      />
-                    ) : (
-                      <div className="grid h-full place-items-center text-xs text-slate-400">
-                        Belum ada screenshot
-                      </div>
-                    )}
-                  </div>
-                  <div className="px-4 py-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="truncate text-sm font-medium text-slate-900">{product.app.name}</p>
-                      {product.app.authorization_status === 'approved' ? (
-                        <Badge tone="success">Approved</Badge>
-                      ) : (
-                        <Badge tone="warning">Pending</Badge>
-                      )}
-                    </div>
-                    <p className="mt-0.5 truncate text-xs text-slate-500">
-                      {product.app.category ?? product.app.description ?? 'Belum ada kategori'}
-                    </p>
-                    <div className="mt-2.5 flex items-center justify-between">
-                      <span className="text-xs text-slate-500 tabular">
-                        {product.screens.length} layar
-                        {product.project ? ` · ${product.project.name}` : ''}
-                      </span>
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600">
-                        Buka <IconExternal size={12} />
-                      </span>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-
-            {products.length > 1 && (
-              <div className="mt-1 flex justify-center gap-1.5">
-                {products.map((product, index) => (
-                  <button
-                    key={product.app.id}
-                    type="button"
-                    aria-label={`Ke produk ${index + 1}`}
-                    onClick={() => {
-                      const el = railRef.current
-                      const item = el?.querySelectorAll<HTMLElement>('[data-rail-item]')[index]
-                      if (el && item) {
-                        el.scrollTo({ left: item.offsetLeft, behavior: 'smooth' })
-                      }
-                    }}
-                    className={`h-1.5 rounded-full transition-all duration-200 ${
-                      index === activeIndex ? 'w-5 bg-slate-800' : 'w-1.5 bg-slate-300'
-                    }`}
-                  />
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </section>
-
-      {/* ---------- Panel kerja (tetap berguna untuk operator) ---------- */}
+      {/* ---------- Panel kerja ---------- */}
       <PageHeader
         title="Ringkasan platform"
         description="Status Capture Studio, Screen Repository, dan progres tiap fase."
@@ -475,16 +277,19 @@ export function DashboardPage() {
           </ol>
         </Card>
 
-        <Card title="Aplikasi terbaru" description="Lima aplikasi terakhir didaftarkan.">
+        <Card title="Aplikasi terdaftar" description="Semua aplikasi yang ada di registry.">
           {loading ? (
             <div className="flex justify-center py-8">
               <Spinner className="h-5 w-5 text-slate-300" />
             </div>
           ) : products.length === 0 ? (
-            <EmptyState title="Belum ada aplikasi" description="Daftarkan aplikasi sumber untuk memulai." />
+            <EmptyState
+              title="Belum ada aplikasi"
+              description="Daftarkan aplikasi sumber untuk memulai."
+            />
           ) : (
             <ul className="divide-y divide-slate-100">
-              {products.slice(0, 5).map((product) => (
+              {products.map((product) => (
                 <li key={product.app.id} className="flex items-center justify-between gap-3 py-2.5">
                   <div className="min-w-0">
                     <Link
@@ -493,7 +298,9 @@ export function DashboardPage() {
                     >
                       {product.app.name}
                     </Link>
-                    <p className="truncate text-xs text-slate-500">{product.app.source_url}</p>
+                    <p className="truncate text-xs text-slate-500">
+                      {product.screens.length} layar · {product.app.source_url}
+                    </p>
                   </div>
                   {product.app.authorization_status === 'approved' ? (
                     <Badge tone="success">Approved</Badge>

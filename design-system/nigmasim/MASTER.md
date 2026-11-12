@@ -192,14 +192,11 @@ sales/presales. Boleh melanggar aturan radius karena ini permukaan presentasi, b
 | Hero paragraf | 15px, line-height longgar, **tebalkan 1–2 frasa kunci** (bukan seluruh paragraf) |
 | CTA utama | Solid `brand-600`, teks putih, **radius pill** (`rounded-full`), tinggi 44px |
 | CTA sekunder | Latar putih, border 1px `brand-600`, teks `brand-700`, **radius pill** |
-| Hero gambar | Radius besar (24–32px) boleh, `object-cover object-top`, label konteks menempel di bawah |
+| Hero gambar | Rasio **16:10** (sama dengan rasio screenshot browser 1440×900) supaya **tidak ada yang terpotong**; kolom gambar lebih lebar dari kolom teks (0.85fr / 1.15fr); label konteks menempel di bawah |
 | Hero putar otomatis | Berganti produk tiap **5 detik**, transisi crossfade 700ms + zoom halus 5% |
-| Jeda animasi | Otomatis berhenti saat kursor di area hero/rail, atau `prefers-reduced-motion` aktif |
+| Jeda animasi | Otomatis berhenti saat kursor di area hero, atau `prefers-reduced-motion` aktif |
 | Titik hero | Titik memanjang untuk slide aktif, bisa diklik untuk pindah manual |
-| Sinkronisasi | Rail produk mengikuti posisi hero (dan sebaliknya) |
-| Rail produk | `overflow-x-auto` + `snap-x snap-mandatory`, kartu 320–380px, scrollbar disembunyikan |
-| Interaksi rail | Bisa **diseret mouse/touch**, tombol panah, titik indikator, snap halus |
-| Indikator aktif | Titik memanjang (pill) saat slide aktif |
+| Navigasi hero | Panah kiri/kanan di tepi kiri-kanan gambar (bukan pojok, supaya tidak bentrok dengan caption & titik) |
 | Hero + rail | Berisi konten nyata: screenshot aplikasi & statusnya, bukan gambar dekoratif |
 
 Aturan yang tetap berlaku di showcase: tanpa gradient, tanpa glassmorphism, satu warna aksen,
