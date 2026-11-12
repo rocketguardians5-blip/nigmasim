@@ -30,9 +30,11 @@ export function LoginPage() {
     <div className="grid min-h-full lg:grid-cols-2">
       <div className="hidden flex-col justify-between border-r border-slate-200 bg-ink-900 p-10 lg:flex">
         <div className="flex items-center gap-2.5">
-          <div className="grid h-7 w-7 place-items-center rounded bg-brand-600 text-[11px] font-bold text-white">
-            NS
-          </div>
+          <img
+            src="/brand/nigmagrid-logo.png"
+            alt="Logo PT Nigmagrid Indo Nesia"
+            className="h-8 w-8"
+          />
           <div>
             <p className="text-[13px] font-semibold leading-tight text-white">NigmaSim</p>
             <p className="text-[11px] leading-tight text-slate-500">PT Nigmagrid Indo Nesia</p>
@@ -57,11 +59,13 @@ export function LoginPage() {
       <div className="flex items-center justify-center bg-slate-50 p-6">
         <div className="w-full max-w-sm">
           <div className="mb-8 lg:hidden">
-            <div className="mb-3 grid h-7 w-7 place-items-center rounded bg-brand-600 text-[11px] font-bold text-white">
-              NS
-            </div>
+            <img
+              src="/brand/nigmagrid-logo.png"
+              alt="Logo PT Nigmagrid Indo Nesia"
+              className="mb-3 h-8 w-8"
+            />
             <p className="text-[13px] font-semibold text-slate-900">NigmaSim</p>
-            <p className="text-[11px] text-slate-500">Simulation Platform</p>
+            <p className="text-[11px] text-slate-500">PT Nigmagrid Indo Nesia</p>
           </div>
 
           <h2 className="text-lg font-semibold text-slate-900">Masuk ke NigmaSim</h2>

@@ -28,6 +28,34 @@ Ciri "tampak AI" yang dilarang:
 
 ---
 
+## Identitas merek
+
+Logo resmi: `frontend/public/brand/nigmagrid-logo.png` (600×600, latar transparan).
+Favicon: `favicon-32.png` · Apple touch: `apple-touch-icon.png`.
+
+| Warna logo | Nilai | Dipakai untuk |
+|---|---|---|
+| Merah | `#ED1C24` | Logo, penyorot pada dokumen, indikator kritis |
+| Biru | `#0085CC` | Warna brand utama (identitas) |
+| Hijau | `#00A250` | Status berhasil |
+| Kuning | `#FAA41A` | Status menunggu |
+| Putih | `#FFFFFF` | Latar logo |
+
+**Warna aksen UI ≠ warna logo mentah.** Warna biru logo `#0085CC` hanya punya kontras
+4.02:1 terhadap putih — di bawah ambang WCAG AA 4.5:1 untuk teks. Karena itu aksen UI
+memakai versi yang digelapkan:
+
+| Token | Nilai | Kontras vs putih |
+|---|---|---|
+| `brand-500` | `#0085CC` | 4.02:1 — hanya untuk garis/ikon besar |
+| `brand-600` (aksen) | `#0077BA` | **4.83:1** — tombol, link, teks aktif |
+| `brand-700` (hover) | `#006BA8` | 5.72:1 |
+
+Logo dipakai apa adanya di sidebar gelap dan halaman login (latarnya transparan,
+jadi tidak perlu kotak putih).
+
+---
+
 ## Token
 
 ### Warna

@@ -11,15 +11,17 @@ export default {
           800: '#1F2937',
           700: '#374151',
         },
-        // Aksen tunggal
+        // Aksen tunggal - diturunkan dari warna logo PT Nigmagrid (#0085CC)
+        // digelapkan agar kontras teks putih >= 4.5:1 (WCAG AA).
         brand: {
-          50: '#EFF6FF',
-          100: '#DBEAFE',
-          200: '#BFDBFE',
-          300: '#93C5FD',
-          500: '#3B82F6',
-          600: '#2563EB',
-          700: '#1D4ED8',
+          50: '#EAF4FB',
+          100: '#D2E9F6',
+          200: '#A5D3ED',
+          300: '#6FB8E1',
+          400: '#2F9AD0',
+          500: '#0085CC',
+          600: '#0077BA',
+          700: '#006BA8',
         },
       },
       borderRadius: {

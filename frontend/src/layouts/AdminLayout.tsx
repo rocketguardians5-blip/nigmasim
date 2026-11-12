@@ -58,12 +58,14 @@ export function AdminLayout() {
   const sidebar = (
     <div className="flex h-full flex-col bg-ink-900">
       <div className="flex items-center gap-2.5 border-b border-white/5 px-4 py-4">
-        <div className="grid h-7 w-7 place-items-center rounded bg-brand-600 text-[11px] font-bold text-white">
-          NS
-        </div>
+        <img
+          src="/brand/nigmagrid-logo.png"
+          alt="Logo PT Nigmagrid Indo Nesia"
+          className="h-7 w-7 shrink-0"
+        />
         <div className="min-w-0">
           <p className="text-[13px] font-semibold leading-tight text-white">NigmaSim</p>
-          <p className="text-[11px] leading-tight text-slate-500">Simulation Platform</p>
+          <p className="text-[11px] leading-tight text-slate-500">PT Nigmagrid Indo Nesia</p>
         </div>
       </div>
 
@@ -87,7 +89,7 @@ export function AdminLayout() {
             >
               {({ isActive }) => (
                 <>
-                  <Icon size={16} className={isActive ? 'text-brand-300' : 'text-slate-500'} />
+                  <Icon size={16} className={isActive ? 'text-brand-400' : 'text-slate-500'} />
                   <span className="flex-1 truncate">{item.label}</span>
                   {item.soon && <span className="text-[11px] text-slate-600">soon</span>}
                 </>
