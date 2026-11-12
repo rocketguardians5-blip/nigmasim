@@ -6,7 +6,7 @@ import { screensApi } from '../lib/capture'
 import type { Screen } from '../lib/capture'
 import { useAuth } from '../lib/auth'
 import { Alert, Badge, Card, EmptyState, PageHeader, Spinner, cn } from '../components/ui'
-import { IconArrowLeft, IconExternal } from '../components/icons'
+import { IconChevronLeft, IconChevronRight, IconExternal } from '../components/icons'
 
 interface Product {
   app: Application
@@ -233,6 +233,27 @@ export function DashboardPage() {
                 ))
               )}
 
+              {heroProducts.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Produk sebelumnya"
+                    onClick={() => setHeroIndex((index) => (index - 1 + heroProducts.length) % heroProducts.length)}
+                    className="absolute left-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-pop backdrop-blur transition-all duration-200 hover:bg-white hover:text-brand-700 active:scale-95"
+                  >
+                    <IconChevronLeft size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Produk berikutnya"
+                    onClick={() => setHeroIndex((index) => (index + 1) % heroProducts.length)}
+                    className="absolute right-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-pop backdrop-blur transition-all duration-200 hover:bg-white hover:text-brand-700 active:scale-95"
+                  >
+                    <IconChevronRight size={18} />
+                  </button>
+                </>
+              )}
+
               {heroProducts.length > 0 && (
                 <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2">
                   <div className="relative min-w-0 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 backdrop-blur">
@@ -291,7 +312,7 @@ export function DashboardPage() {
               onClick={() => scrollRail(-1)}
               className="grid h-8 w-8 place-items-center rounded-full border border-slate-300 bg-white text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-900"
             >
-              <IconArrowLeft size={15} />
+              <IconChevronLeft size={15} />
             </button>
             <button
               type="button"
@@ -299,7 +320,7 @@ export function DashboardPage() {
               onClick={() => scrollRail(1)}
               className="grid h-8 w-8 place-items-center rounded-full border border-slate-300 bg-white text-slate-600 transition-colors hover:border-slate-400 hover:text-slate-900"
             >
-              <IconArrowLeft size={15} className="rotate-180" />
+              <IconChevronRight size={15} />
             </button>
           </div>
         </div>

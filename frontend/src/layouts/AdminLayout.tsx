@@ -228,8 +228,8 @@ export function AdminLayout() {
           <span className="ml-auto text-[11px] text-slate-400">NigmaSim v0.1.0 · Phase 1</span>
         </header>
 
-        <main className="flex-1 overflow-y-auto px-4 py-6 lg:px-6">
-          <div className="mx-auto max-w-5xl">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 lg:px-6">
+          <div className="mx-auto max-w-[1700px]">
             <Outlet />
           </div>
         </main>
