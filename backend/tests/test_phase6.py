@@ -83,6 +83,12 @@ def test_generate_document_with_steps(
     assert "<!doctype html>" in document["html"]
     assert "PT Nigmagrid Indo Nesia" in document["html"]
 
+    # Logo harus embedded sebagai data URI.
+    # Kalau pakai path relatif, preview di browser tetap jalan tetapi PDF
+    # (yang dirender tanpa web server) akan menampilkan kotak kosong.
+    assert "data:image/png;base64," in document["html"]
+    assert document["content"]["branding"].get("logo_data")
+
 
 def test_document_list_and_edit(
     client: TestClient, auth_headers: dict[str, str], project_id: int

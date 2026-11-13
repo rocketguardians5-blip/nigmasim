@@ -7,6 +7,7 @@ Dokumen tetap boleh disunting sebelum dipublikasikan.
 from __future__ import annotations
 
 import html
+from pathlib import Path
 from datetime import date
 from typing import Any
 
@@ -58,6 +59,21 @@ def _data_uri(relative_path: str | None) -> str | None:
     mime = mimetypes.guess_type(path.name)[0] or "image/png"
     encoded = base64.b64encode(path.read_bytes()).decode("ascii")
     return f"data:{mime};base64,{encoded}"
+
+
+def _logo_data_uri() -> str | None:
+    """Logo perusahaan sebagai data URI.
+
+    Path relatif (/brand/...) hanya jalan di preview browser. Saat PDF dirender
+    tanpa web server, path relatif tidak ditemukan -> logo jadi kotak kosong.
+    """
+    logo = Path(__file__).resolve().parents[3] / "frontend" / "public" / "brand" / "nigmagrid-logo.png"
+    if not logo.exists():
+        return None
+    import base64
+
+    encoded = base64.b64encode(logo.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
 
 
 def build_content(
@@ -132,6 +148,7 @@ def build_content(
             "company": COMPANY_NAME,
             "application": app_name,
             "logo": "/brand/nigmagrid-logo.png",
+            "logo_data": _logo_data_uri(),
         },
         "revision": {
             "version": "1.0",
@@ -298,7 +315,7 @@ def render_html(title: str, doc_type: str, content: dict[str, Any]) -> str:
 </head>
 <body>
   <header class="brand">
-    <img src="{esc(branding.get('logo', '/brand/nigmagrid-logo.png'))}" alt="" />
+    <img src="{esc(branding.get('logo_data') or branding.get('logo', '/brand/nigmagrid-logo.png'))}" alt="" />
     <div>
       <div class="company">{esc(branding.get('company', COMPANY_NAME))}</div>
       <div class="meta">{esc(branding.get('application', ''))} · {esc(DOC_TYPES.get(doc_type, doc_type))}</div>
