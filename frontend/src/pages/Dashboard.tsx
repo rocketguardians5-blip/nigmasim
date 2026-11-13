@@ -23,7 +23,7 @@ const PHASES = [
   { name: 'Full Simulation', state: 'belum' },
   { name: 'Workflow + Walkthrough', state: 'belum' },
   { name: 'SOP Generator', state: 'belum' },
-  { name: 'Publish + Analytics', state: 'belum' },
+  { name: 'Publish + Analytics', state: 'selesai' },
 ]
 
 export function DashboardPage() {

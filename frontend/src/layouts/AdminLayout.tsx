@@ -40,8 +40,8 @@ const NAV: NavItem[] = [
   { to: '/workflow', label: 'Workflow Builder', icon: IconFlow },
   { to: '/tutorial', label: 'Tutorial Builder', icon: IconBook },
   { to: '/documentation', label: 'Documentation Generator', icon: IconDoc },
-  { to: '/demos', label: 'Published Demos', icon: IconGlobe, soon: true },
-  { to: '/analytics', label: 'Analytics', icon: IconChart, soon: true },
+  { to: '/demos', label: 'Published Demos', icon: IconGlobe },
+  { to: '/analytics', label: 'Analytics', icon: IconChart },
   { to: '/users', label: 'User Management', icon: IconUsers },
   { to: '/settings', label: 'Settings', icon: IconSettings, soon: true },
 ]

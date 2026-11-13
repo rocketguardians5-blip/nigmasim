@@ -17,6 +17,7 @@ import { WorkflowBuilderPage } from './pages/WorkflowBuilder'
 import { TutorialBuilderPage } from './pages/TutorialBuilder'
 import { DocumentationGeneratorPage } from './pages/DocumentationGenerator'
 import { DemoManagementPage } from './pages/DemoManagement'
+import { AnalyticsPage } from './pages/AnalyticsPage'
 import { PublicDemoPage } from './pages/PublicDemo'
 import { usePageVisit } from './hooks/usePageVisit'
 import { Spinner } from './components/ui'
@@ -97,7 +98,7 @@ export function App() {
         <Route path="/tutorial" element={<TutorialBuilderPage />} />
         <Route path="/documentation" element={<DocumentationGeneratorPage />} />
         <Route path="/demos" element={<DemoManagementPage />} />
-        <Route path="/analytics" element={<PlaceholderRoute />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/settings" element={<PlaceholderRoute />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
