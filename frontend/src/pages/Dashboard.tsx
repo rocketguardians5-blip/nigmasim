@@ -19,10 +19,10 @@ interface Product {
 const PHASES = [
   { name: 'Registry + Capture Studio', state: 'selesai' },
   { name: 'Screen Repository', state: 'selesai' },
-  { name: 'UI Reconstruction', state: 'berikutnya' },
-  { name: 'Full Simulation', state: 'belum' },
-  { name: 'Workflow + Walkthrough', state: 'belum' },
-  { name: 'SOP Generator', state: 'belum' },
+  { name: 'UI Reconstruction', state: 'selesai' },
+  { name: 'Full Simulation', state: 'selesai' },
+  { name: 'Workflow + Walkthrough', state: 'selesai' },
+  { name: 'SOP Generator', state: 'selesai' },
   { name: 'Publish + Analytics', state: 'selesai' },
 ]
 
