@@ -16,6 +16,8 @@ import { SimulationPlayerPage } from './pages/SimulationPlayer'
 import { WorkflowBuilderPage } from './pages/WorkflowBuilder'
 import { TutorialBuilderPage } from './pages/TutorialBuilder'
 import { DocumentationGeneratorPage } from './pages/DocumentationGenerator'
+import { DemoManagementPage } from './pages/DemoManagement'
+import { PublicDemoPage } from './pages/PublicDemo'
 import { usePageVisit } from './hooks/usePageVisit'
 import { Spinner } from './components/ui'
 
@@ -73,6 +75,8 @@ export function App() {
         }
       />
 
+      <Route path="/public/demo/:token" element={<PublicDemoPage />} />
+
       <Route
         element={
           <RequireAuth>
@@ -87,11 +91,12 @@ export function App() {
         <Route path="/capture" element={<CaptureStudioPage />} />
         <Route path="/screens" element={<ScreenRepositoryPage />} />
         <Route path="/reconstruction" element={<UIReconstructionPage />} />
-        <Route path="/simulation" element={<SimulationBuilderPage />} />`n        <Route path="/simulation/play/:projectId" element={<SimulationPlayerPage />} />
+        <Route path="/simulation" element={<SimulationBuilderPage />} />
+        <Route path="/simulation/play/:projectId" element={<SimulationPlayerPage />} />
         <Route path="/workflow" element={<WorkflowBuilderPage />} />
         <Route path="/tutorial" element={<TutorialBuilderPage />} />
         <Route path="/documentation" element={<DocumentationGeneratorPage />} />
-        <Route path="/demos" element={<PlaceholderRoute />} />
+        <Route path="/demos" element={<DemoManagementPage />} />
         <Route path="/analytics" element={<PlaceholderRoute />} />
         <Route path="/settings" element={<PlaceholderRoute />} />
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -67,3 +67,5 @@ class Project(Base):
     )
 
     application: Mapped[Application] = relationship(back_populates="projects")
+    demo_links: Mapped[list["DemoLink"]] = relationship(back_populates="project")
+    demo_scenarios: Mapped[list["DemoScenario"]] = relationship(back_populates="project")

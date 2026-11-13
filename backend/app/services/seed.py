@@ -38,6 +38,8 @@ DEFAULT_ROLES: dict[str, dict[str, object]] = {
             "documents:read",
             "documents:write",
             "analytics:read",
+            "demo:read",
+            "demo:write",
         ],
     },
     "capture_operator": {
@@ -67,6 +69,7 @@ DEFAULT_ROLES: dict[str, dict[str, object]] = {
             "documents:write",
             "documents:review",
             "analytics:read",
+            "demo:read",
         ],
     },
     "demo_viewer": {

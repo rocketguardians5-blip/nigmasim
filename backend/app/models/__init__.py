@@ -1,8 +1,9 @@
 """Ekspor seluruh model agar mudah diimpor dan dipakai Alembic."""
 
 from app.db.session import Base
-from app.models.document import Document
 from app.models.capture import AuditLog, CaptureSession, Interaction, Screen, ScreenElement
+from app.models.demo import DemoLink, DemoScenario
+from app.models.document import Document
 from app.models.simulation import (
     Simulation,
     SimulationDataset,
@@ -23,6 +24,8 @@ __all__ = [
     "Base",
     "AuditLog",
     "CaptureSession",
+    "DemoLink",
+    "DemoScenario",
     "Document",
     "Interaction",
     "Screen",

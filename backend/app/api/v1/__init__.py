@@ -6,6 +6,7 @@ from app.api.v1 import (
     analytics,
     applications,
     auth,
+    demo,
     documents,
     capture,
     health,
@@ -28,3 +29,4 @@ api_router.include_router(simulation.router)
 api_router.include_router(documents.router)
 api_router.include_router(workflow.router)
 api_router.include_router(analytics.router)
+api_router.include_router(demo.router)
