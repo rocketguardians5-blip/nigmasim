@@ -16,6 +16,7 @@ import { SimulationPlayerPage } from './pages/SimulationPlayer'
 import { WorkflowBuilderPage } from './pages/WorkflowBuilder'
 import { TutorialBuilderPage } from './pages/TutorialBuilder'
 import { DocumentationGeneratorPage } from './pages/DocumentationGenerator'
+import { usePageVisit } from './hooks/usePageVisit'
 import { Spinner } from './components/ui'
 
 function RequireAuth({ children }: { children: ReactElement }) {
@@ -44,6 +45,7 @@ function PlaceholderRoute() {
 
 export function App() {
   const { user, loading } = useAuth()
+  usePageVisit()
 
   return (
     <Routes>
