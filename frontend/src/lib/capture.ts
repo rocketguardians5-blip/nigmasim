@@ -106,6 +106,7 @@ export const captureApi = {
   resume: (sessionId: number) => api.post<CaptureSession>(`/capture-sessions/${sessionId}/resume`),
   stop: (sessionId: number) => api.post<CaptureSession>(`/capture-sessions/${sessionId}/stop`),
   state: (sessionId: number) => api.get<WorkerState>(`/capture-sessions/${sessionId}/state`),
+  focus: (sessionId: number) => api.post<{ status: string; url: string }>(`/capture-sessions/${sessionId}/focus`),
   capture: (sessionId: number, title?: string, fullPage = false) => {
     const query = new URLSearchParams({ full_page: String(fullPage) })
     if (title) query.set('title', title)

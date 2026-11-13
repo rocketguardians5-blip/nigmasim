@@ -1,30 +1,61 @@
 <#
 .SYNOPSIS
-  Menjalankan NigmaSim dalam mode jaringan lokal (LAN), sehingga bisa dibuka
-  dari perangkat lain di WiFi yang sama - misalnya HP untuk melihat tampilan
-  mobile, atau laptop kedua untuk presentasi.
+  Menyalakan seluruh NigmaSim (backend + capture worker + web) sebagai proses
+  terpisah yang tidak ikut mati saat jendela PowerShell ditutup.
 
 .DESCRIPTION
-  Script ini membوتak:
-    1. Backend API        -> 0.0.0.0:8000
-    2. Capture Worker     -> 127.0.0.1:8010 (TETAP LOKAL, tidak dibuka ke LAN)
-    3. Frontend (Vite)    -> 0.0.0.0:5173 + proxy /api ke backend
+  Semua service dijalankan lewat Start-Process sehingga!
+    - tidak terikat pada terminal yangopened
+    - bisa dibuka dari perangkat lain di WiFi yang sama
+    - log ditulis ke storage/logs/ agar mudah dicek
 
-  Capture Worker sengaja TIDAK dibuka ke jaringan: dia yang mengendalikan
-  browser dan memegang sesi login aplikasi sumber.
+  -Backend API        127.0.0.1:8000   (tidak dibuka ke jaringan)
+  -Capture Worker     127.0.0.1:8010   (WAJIB lokal - memegang sesi login)
+  -Web Admin          0.0.0.0:5173      (satu-satunya yang dibuka ke LAN)
 
-.PARAMETER Port
-  Port frontend (default 5173).
+.PARAMETER Stop
+  Hentikan semua service NigmaSim lalu keluar.
+
+.PARAMETER WithSample
+  Jalankan juga aplikasi contoh di http://127.0.0.1:8099
 
 .EXAMPLE
   .\scripts\dev-lan.ps1
+  .\scripts\dev-lan.ps1 -WithSample
+  .\scripts\dev-lan.ps1 -Stop
 #>
 param(
-    [int]$Port = 5173
+    [switch]$Stop,
+    [switch]$WithSample
 )
 
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'
 $root = Split-Path -Parent $PSScriptRoot
+$logs = Join-Path $root 'storage\logs'
+New-Item -ItemType Directory -Force -Path $logs | Out-Null
+
+function Get-NigmaSimProcesses {
+    Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
+        Where-Object { $_.CommandLine -match 'uvicorn\s+(app\.main:app|main:app)' -or $_.CommandLine -match 'http\.server\s+8099' }
+}
+
+function Get-ViteProcesses {
+    Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match 'vite' }
+}
+
+function Stop-NigmaSim {
+    $targets = @((Get-NigmaSimProcesses), (Get-ViteProcesses)) | Where-Object { $_ }
+    foreach ($p in $targets) {
+        Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host 'Semua service NigmaSim dihentikan.' -ForegroundColor Yellow
+}
+
+if ($Stop) { Stop-NigmaSim; exit 0 }
+
+# Hentikan instance lama supaya tidak konflik port
+Stop-NigmaSim
+Start-Sleep -Seconds 1
 
 function Get-LanIp {
     $ip = Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
@@ -39,37 +70,98 @@ function Get-LanIp {
     return 'localhost'
 }
 
-$lanIp = Get-LanIp
-
-Write-Host ''
-Write-Host '  NigmaSim - mode jaringan lokal (LAN)' -ForegroundColor Cyan
-Write-Host '  ------------------------------------------------' -ForegroundColor DarkGray
-Write-Host "  Dari perangkat lain, buka:  http://${lanIp}:${Port}" -ForegroundColor Green
-Write-Host ''
-Write-Host '  Pastikan firewall mengizinkan Node.js & Python pada jaringan privat.' -ForegroundColor Yellow
-Write-Host ''
-
-# --- Backend -----------------------------------------------------------------
-# Tetap LOKAL saja. Frontend (Vite) yang akan menjadi proxy /api ke backend,
-# jadi tidak perlu membuka port 8000 ke jaringan.
-$backend = Join-Path $root 'backend'
-$backendPy = Join-Path $backend '.venv\Scripts\python.exe'
-Start-Process -FilePath $backendPy `
-    -ArgumentList '-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000' `
-    -WorkingDirectory $backend `
-    -WindowStyle Minimized
-
-# --- Capture Worker (lokal saja) --------------------------------------------
-$worker = Join-Path $root 'capture-worker\src'
+$backendPy = Join-Path $root 'backend\.venv\Scripts\python.exe'
 $workerPy = Join-Path $root 'capture-worker\.venv\Scripts\python.exe'
+
+Write-Host ''
+Write-Host '  Menyalakan NigmaSim...' -ForegroundColor Cyan
+Write-Host '  ------------------------------------------------'
+
+# 1. Backend API (lokal saja)
+Start-Process -FilePath $backendPy `
+    -ArgumentList '-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000', '--log-level', 'warning' `
+    -WorkingDirectory (Join-Path $root 'backend') `
+    -RedirectStandardOutput (Join-Path $logs 'backend.out.log') `
+    -RedirectStandardError (Join-Path $logs 'backend.err.log') `
+    -WindowStyle Hidden
+Write-Host '  [1/3] Backend API      -> 127.0.0.1:8000' -ForegroundColor Gray
+
+# 2. Capture Worker (lokal saja)
 Start-Process -FilePath $workerPy `
-    -ArgumentList '-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', '8010' `
-    -WorkingDirectory $worker `
-    -WindowStyle Minimized
+    -ArgumentList '-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', '8010', '--log-level', 'warning' `
+    -WorkingDirectory (Join-Path $root 'capture-worker\src') `
+    -RedirectStandardOutput (Join-Path $logs 'worker.out.log') `
+    -RedirectStandardError (Join-Path $logs 'worker.err.log') `
+    -WindowStyle Hidden
+Write-Host '  [2/3] Capture Worker   -> 127.0.0.1:8010' -ForegroundColor Gray
 
-Start-Sleep -Seconds 3
+# 3. Web Admin (dibuka ke jaringan)
+# Jalankan node + bin vite langsung (npm.cmd via Start-Process sering gagal diam-diam).
+$node = (Get-Command node -ErrorAction SilentlyContinue).Source
+$viteBin = Join-Path $root 'frontend\node_modules\vite\bin\vite.js'
+if ($node -and (Test-Path $viteBin)) {
+    Start-Process -FilePath $node `
+        -ArgumentList $viteBin, '--host', '0.0.0.0', '--port', '5173' `
+        -WorkingDirectory (Join-Path $root 'frontend') `
+        -RedirectStandardOutput (Join-Path $logs 'web.out.log') `
+        -RedirectStandardError (Join-Path $logs 'web.err.log') `
+        -WindowStyle Hidden
+    Write-Host '  [3/3] Web Admin        -> 0.0.0.0:5173' -ForegroundColor Gray
+} else {
+    $npm = (Get-Command npm -ErrorAction SilentlyContinue).Source
+    Start-Process -FilePath $npm `
+        -ArgumentList 'run', 'dev', '--', '--host', '0.0.0.0', '--port', '5173' `
+        -WorkingDirectory (Join-Path $root 'frontend') `
+        -RedirectStandardOutput (Join-Path $logs 'web.out.log') `
+        -RedirectStandardError (Join-Path $logs 'web.err.log') `
+        -WindowStyle Hidden
+    Write-Host '  [3/3] Web Admin        -> 0.0.0.0:5173 (npm)' -ForegroundColor Gray
+}
 
-# --- Frontend ----------------------------------------------------------------
-$frontend = Join-Path $root 'frontend'
-Set-Location $frontend
-npm run dev -- --host 0.0.0.0 --port $Port
+# 4. (opsional) aplikasi contoh
+if ($WithSample) {
+    Start-Process -FilePath $workerPy `
+        -ArgumentList '-m', 'http.server', '8099', '--bind', '127.0.0.1' `
+        -WorkingDirectory (Join-Path $root 'samples\sample-app') `
+        -RedirectStandardOutput (Join-Path $logs 'sample.out.log') `
+        -RedirectStandardError (Join-Path $logs 'sample.err.log') `
+        -WindowStyle Hidden
+    Write-Host '  [+]  Aplikasi contoh  -> 127.0.0.1:8099' -ForegroundColor Gray
+}
+
+# Tunggu sampai siap
+$checks = @(
+    @{ name = 'Backend API'; url = 'http://127.0.0.1:8000/api/v1/health' },
+    @{ name = 'Capture Worker'; url = 'http://127.0.0.1:8010/health' },
+    @{ name = 'Web Admin'; url = 'http://127.0.0.1:5173' }
+)
+$ready = $true
+foreach ($check in $checks) {
+    $ok = $false
+    for ($i = 0; $i -lt 20; $i++) {
+        try {
+            Invoke-WebRequest -Uri $check.url -UseBasicParsing -TimeoutSec 3 | Out-Null
+            $ok = $true
+            break
+        } catch { Start-Sleep -Milliseconds 500 }
+    }
+    if ($ok) {
+        Write-Host ("  OK   {0}" -f $check.name) -ForegroundColor Green
+    } else {
+        Write-Host ("  GAGAL {0} - cek {1}" -f $check.name, $logs) -ForegroundColor Red
+        $ready = $false
+    }
+}
+
+$lanIp = Get-LanIp
+Write-Host ''
+Write-Host '  ------------------------------------------------' -ForegroundColor DarkGray
+Write-Host "  Dari komputer ini : http://localhost:5173" -ForegroundColor Green
+Write-Host "  Dari perangkat lain (WiFi sama): http://${lanIp}:5173" -ForegroundColor Green
+Write-Host ''
+Write-Host '  Login  : admin@nigmasim.com / Admin#12345' -ForegroundColor Yellow
+Write-Host "  Log    : $logs" -ForegroundColor DarkGray
+Write-Host '  Stop   : .\scripts\dev-lan.ps1 -Stop' -ForegroundColor DarkGray
+Write-Host ''
+
+if (-not $ready) { exit 1 }

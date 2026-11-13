@@ -93,6 +93,11 @@ def session_state() -> dict[str, Any]:
     return _call("GET", "/session/state")
 
 
+def focus_browser() -> dict[str, Any]:
+    """Angkat jendela browser ke depan (kalau tersembunyi di belakang)."""
+    return _call("POST", "/session/focus")
+
+
 def take_capture(label: str, full_page: bool, relative_dir: str) -> dict[str, Any]:
     return _call(
         "POST",

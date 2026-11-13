@@ -257,7 +257,12 @@ class BrowserManager:
             )
 
         self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(headless=settings.headless)
+        self._browser = self._playwright.chromium.launch(
+            headless=settings.headless,
+            # Jendela muncul di kiri atas supaya mudah ditemukan operator,
+            # dan tidak tersembunyi di belakang jendela lain.
+            args=["--window-position=30,30", "--window-size=1476,986"],
+        )
         self._context = self._browser.new_context(
             viewport={
                 "width": viewport_width or settings.default_viewport_width,
@@ -274,8 +279,23 @@ class BrowserManager:
 
         self.session = Session(id=f"cap_{int(time.time() * 1000)}", allowed_hosts=hosts)
         page.goto(url, wait_until="domcontentloaded")
+        # Angkat jendela browser ke depan supaya operator langsung melihatnya.
+        try:
+            page.bring_to_front()
+        except Exception:  # noqa: BLE001 - tidak semua platform mendukung
+            pass
         self.session.url = page.url
         return self.session
+
+    def focus(self) -> dict[str, Any]:
+        """Fokuskan jendela browser (kalau tersembunyi di belakang)."""
+        self._require_session()
+        assert self._page is not None
+        try:
+            self._page.bring_to_front()
+        except Exception as exc:  # noqa: BLE001
+            raise CaptureError(f"Gagal memfokuskan jendela browser: {exc}") from exc
+        return {"status": "focused", "url": self._page.url, "title": self._page.title()}
 
     def _guard_navigation(self, page: Page, hosts: list[str]) -> None:
         """Blokir navigasi ke host di luar allowlist (frame utama saja)."""

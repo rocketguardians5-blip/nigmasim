@@ -36,6 +36,7 @@ export function CaptureStudioPage() {
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [focusing, setFocusing] = useState(false)
 
   // Muat daftar aplikasi
   useEffect(() => {
@@ -133,8 +134,20 @@ export function CaptureStudioPage() {
     }, 'Browser dibuka. Silakan login secara manual di jendela browser.')
   }
 
-  async function captureScreen() {
+  async function focusBrowser() {
     if (!session) return
+    setFocusing(true)
+    try {
+      await captureApi.focus(session.id)
+      setNotice('Jendela browser dimunculkan ke depan.')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Gagal memfokuskan jendela browser')
+    } finally {
+      setFocusing(false)
+    }
+  }
+
+  async function captureScreen() {    if (!session) return
     await run(async () => {
       const screen = await captureApi.capture(session.id)
       setScreens((prev) => [screen, ...prev])
@@ -238,8 +251,16 @@ export function CaptureStudioPage() {
                   Buka Browser
                 </Button>
               )}
-              {session?.status === 'running' && (
+              {session && session.status === 'running' && (
                 <>
+                  <Button
+                    variant="secondary"
+                    onClick={() => void focusBrowser()}
+                    loading={focusing}
+                    title="Jika jendela browser tersembunyi di belakang"
+                  >
+                    Fokuskan jendela
+                  </Button>
                   <Button onClick={() => void captureScreen()} loading={busy}>
                     <IconCamera size={14} /> Ambil Screenshot
                   </Button>
@@ -292,9 +313,12 @@ export function CaptureStudioPage() {
             <div className="mt-4 rounded border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs leading-relaxed text-slate-600">
                 <strong className="font-medium text-slate-700">Cara pakai:</strong> tekan "Buka Browser",
-                lalu jendela Chromium akan muncul di layar Anda. Login sendiri dengan akun resmi — NigmaSim
-                tidak pernah menyimpan kredensial. Setelah sampai halaman yang ingin diambil, tekan
-                "Ambil Screenshot" di halaman ini.
+                lalu jendela <strong className="font-medium text-slate-700">Chromium terpisah</strong> akan
+                muncul (bukan tab di Chrome Anda — ini disengaja agar profil & cookie pribadi Anda
+                tidak tersentuh). Butuh 2–5 detik. Kalau jendelanya tersembunyi di belakang,
+                tekan <strong className="font-medium text-slate-700">"Fokuskan jendela"</strong>.
+                Login sendiri dengan akun resmi — NigmaSim tidak pernah menyimpan kredensial.
+                Setelah sampai halaman yang ingin diambil, tekan "Ambil Screenshot" di halaman ini.
               </p>
             </div>
           </>

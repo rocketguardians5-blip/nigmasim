@@ -125,6 +125,16 @@ def mask(
     return {"image_base64": base64.b64encode(masking.redact(raw, boxes)).decode("ascii")}
 
 
+@app.post("/session/focus")
+def focus(x_worker_token: str | None = Header(default=None)) -> dict[str, Any]:
+    """Angkat jendela browser ke depan (kalau tersembunyi di belakang)."""
+    _check_token(x_worker_token)
+    try:
+        return manager.focus()
+    except CaptureError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @app.post("/document/pdf")
 def render_pdf(
     payload: dict[str, Any], x_worker_token: str | None = Header(default=None)

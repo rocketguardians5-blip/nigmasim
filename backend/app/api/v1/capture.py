@@ -232,6 +232,20 @@ def session_state(
         raise _worker_or_503(exc) from exc
 
 
+@router.post("/capture-sessions/{session_id}/focus")
+def focus_browser(
+    session_id: int,
+    _: User = Depends(require_permission("capture:operate")),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Angkat jendela browser capture ke depan."""
+    _get_session(db, session_id)
+    try:
+        return capture_client.focus_browser()
+    except (WorkerUnavailableError, WorkerError) as exc:
+        raise _worker_or_503(exc) from exc
+
+
 @router.post("/capture-sessions/{session_id}/capture", response_model=ScreenOut, status_code=201)
 def take_capture(
     session_id: int,
