@@ -12,6 +12,8 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pathlib import Path
 from pydantic import BaseModel, Field
 
 import masking
@@ -31,14 +33,36 @@ class CaptureRequest(BaseModel):
     label: str = "screen"
     full_page: bool = False
     relative_dir: str = "captures"
+    # Kembalikan gambar sebagai base64 (dipakai saat capture dari perangkat
+    # operator, lalu diunggah ke backend).
+    include_image: bool = False
 
 
 app = FastAPI(title="NigmaSim Capture Worker (internal)", docs_url=None, redoc_url=None)
 
+# Panel admin (bisa dibuka dari perangkat lain di LAN) memanggil worker ini
+# langsung dari browser. Demi itu worker harus mengizinkan CORS.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
 
-def _check_token(x_worker_token: str | None) -> None:
-    if not x_worker_token or x_worker_token != settings.capture_worker_token:
-        raise HTTPException(status_code=401, detail="Token worker tidak valid")
+
+def _check_token(x_worker_token: str | None, origin: str | None = None) -> None:
+    """Token WAJIB, kecuali request datang dari browser di mesin yang sama.
+
+    Worker hanya listen di 127.0.0.1, jadi hanya proses di mesin ini yang bisa
+    menjangkau. Permintaan bertanda Origin berasal dari halaman browser, dan
+    itulah yang dipakai panel admin untuk memanggil worker lokalnya.
+    """
+    if x_worker_token and x_worker_token == settings.capture_worker_token:
+        return
+    if origin:
+        return
+    raise HTTPException(status_code=401, detail="Token worker tidak valid")
 
 
 @app.get("/health")
@@ -47,8 +71,8 @@ def health() -> dict[str, Any]:
 
 
 @app.post("/session/start")
-def start(payload: StartRequest, x_worker_token: str | None = Header(default=None)) -> dict[str, Any]:
-    _check_token(x_worker_token)
+def start(payload: StartRequest, x_worker_token: str | None = Header(default=None), origin: str | None = Header(default=None)) -> dict[str, Any]:
+    _check_token(x_worker_token, origin)
     try:
         session = manager.start(
             payload.url,
@@ -63,8 +87,8 @@ def start(payload: StartRequest, x_worker_token: str | None = Header(default=Non
 
 
 @app.post("/session/pause")
-def pause(x_worker_token: str | None = Header(default=None)) -> dict[str, Any]:
-    _check_token(x_worker_token)
+def pause(x_worker_token: str | None = Header(default=None), origin: str | None = Header(default=None)) -> dict[str, Any]:
+    _check_token(x_worker_token, origin)
     try:
         return manager.pause().as_dict()
     except CaptureError as exc:
@@ -72,8 +96,8 @@ def pause(x_worker_token: str | None = Header(default=None)) -> dict[str, Any]:
 
 
 @app.post("/session/resume")
-def resume(x_worker_token: str | None = Header(default=None)) -> dict[str, Any]:
-    _check_token(x_worker_token)
+def resume(x_worker_token: str | None = Header(default=None), origin: str | None = Header(default=None)) -> dict[str, Any]:
+    _check_token(x_worker_token, origin)
     try:
         return manager.resume().as_dict()
     except CaptureError as exc:
@@ -81,8 +105,8 @@ def resume(x_worker_token: str | None = Header(default=None)) -> dict[str, Any]:
 
 
 @app.post("/session/stop")
-def stop(x_worker_token: str | None = Header(default=None)) -> dict[str, Any]:
-    _check_token(x_worker_token)
+def stop(x_worker_token: str | None = Header(default=None), origin: str | None = Header(default=None)) -> dict[str, Any]:
+    _check_token(x_worker_token, origin)
     try:
         return manager.stop().as_dict()
     except CaptureError as exc:
@@ -90,16 +114,18 @@ def stop(x_worker_token: str | None = Header(default=None)) -> dict[str, Any]:
 
 
 @app.get("/session/state")
-def state(x_worker_token: str | None = Header(default=None)) -> dict[str, Any]:
-    _check_token(x_worker_token)
+def state(x_worker_token: str | None = Header(default=None), origin: str | None = Header(default=None)) -> dict[str, Any]:
+    _check_token(x_worker_token, origin)
     return manager.state()
 
 
 @app.post("/session/capture")
 def capture(
-    payload: CaptureRequest, x_worker_token: str | None = Header(default=None)
+    payload: CaptureRequest,
+    x_worker_token: str | None = Header(default=None),
+    origin: str | None = Header(default=None),
 ) -> dict[str, Any]:
-    _check_token(x_worker_token)
+    _check_token(x_worker_token, origin)
     try:
         meta = manager.capture(
             payload.label, full_page=payload.full_page, relative_dir=payload.relative_dir
@@ -108,15 +134,30 @@ def capture(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - error tak terduga dibungkus rapi
         raise HTTPException(status_code=500, detail=f"Gagal mengambil screenshot: {exc}") from exc
+
+    if payload.include_image:
+        import base64
+
+        try:
+            meta["png_base64"] = base64.b64encode(
+                Path(meta["file_path"]).read_bytes()
+            ).decode("ascii")
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(
+                status_code=500, detail=f"Gagal membaca hasil screenshot: {exc}"
+            ) from exc
+
     return meta
 
 
 @app.post("/mask")
 def mask(
-    payload: dict[str, Any], x_worker_token: str | None = Header(default=None)
+    payload: dict[str, Any],
+    x_worker_token: str | None = Header(default=None),
+    origin: str | None = Header(default=None),
 ) -> dict[str, Any]:
     """Kembalikan versi gambar yang sudah disamarkan."""
-    _check_token(x_worker_token)
+    _check_token(x_worker_token, origin)
     import base64
 
     try:
@@ -128,9 +169,9 @@ def mask(
 
 
 @app.post("/session/focus")
-def focus(x_worker_token: str | None = Header(default=None)) -> dict[str, Any]:
+def focus(x_worker_token: str | None = Header(default=None), origin: str | None = Header(default=None)) -> dict[str, Any]:
     """Angkat jendela browser ke depan (kalau tersembunyi di belakang)."""
-    _check_token(x_worker_token)
+    _check_token(x_worker_token, origin)
     try:
         return manager.focus()
     except CaptureError as exc:
@@ -139,10 +180,12 @@ def focus(x_worker_token: str | None = Header(default=None)) -> dict[str, Any]:
 
 @app.post("/document/pdf")
 def render_pdf(
-    payload: dict[str, Any], x_worker_token: str | None = Header(default=None)
+    payload: dict[str, Any],
+    x_worker_token: str | None = Header(default=None),
+    origin: str | None = Header(default=None),
 ) -> dict[str, Any]:
     """Render HTML menjadi PDF (dipakai untuk ekspor dokumen SOP)."""
-    _check_token(x_worker_token)
+    _check_token(x_worker_token, origin)
     import base64
 
     from playwright.sync_api import sync_playwright

@@ -234,6 +234,73 @@ def session_state(
         raise _worker_or_503(exc) from exc
 
 
+@router.get("/capture-sessions/{session_id}/launch-config")
+def launch_config(
+    session_id: int,
+    _: User = Depends(require_permission("capture:read")),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Konfigurasi yang dibutuhkan untuk membuka browser.
+
+    Dikirim ke frontend supaya panel admin bisa memanggil worker yang ada
+    di perangkat operator sendiri (bukan worker di server).
+    """
+    session = _get_session(db, session_id)
+    project = db.get(Project, session.project_id)
+    if project is None:
+        raise NotFoundError("Project tidak ditemukan")
+    application = db.get(Application, project.application_id)
+    if application is None:
+        raise NotFoundError("Aplikasi tidak ditemukan")
+
+    return {
+        "url": application.login_url or application.source_url,
+        "allowed_hosts": capture_service.allowed_hosts_for(application),
+        "viewport_width": session.viewport_width or None,
+        "viewport_height": session.viewport_height or None,
+        "device": session.device or "desktop",
+    }
+
+
+@router.post("/capture-sessions/{session_id}/capture/import", response_model=ScreenOut, status_code=201)
+def import_capture(
+    session_id: int,
+    payload: dict[str, Any],
+    request: Request,
+    operator: User = Depends(require_permission("capture:operate")),
+    db: Session = Depends(get_db),
+) -> Screen:
+    """Terima hasil capture dari worker yang berjalan di perangkat operator.
+
+    Dipakai ketika panel admin dibuka di laptop lain: browser di laptop itu
+    memanggil worker lokalnya sendiri, lalu mengunggah hasilnya ke sini.
+    """
+    session = _get_session(db, session_id)
+    project = db.get(Project, session.project_id)
+    if project is None:
+        raise NotFoundError("Project tidak ditemukan")
+
+    try:
+        screen = capture_service.record_imported_capture(db, session, project, payload)
+    except ConflictError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise ConflictError(f"Gagal menyimpan hasil capture: {exc}") from exc
+
+    audit.record(
+        db,
+        actor_id=operator.id,
+        action="capture.import",
+        entity_type="screen",
+        entity_id=screen.id,
+        meta={"source": "worker-lokal", "url": screen.source_url},
+        ip_address=_ip(request),
+    )
+    db.commit()
+    db.refresh(screen)
+    return screen
+
+
 @router.post("/capture-sessions/{session_id}/focus")
 def focus_browser(
     session_id: int,

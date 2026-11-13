@@ -34,6 +34,50 @@ def allowed_hosts_for(application: Application) -> list[str]:
     return hosts
 
 
+def record_imported_capture(
+    db: Session,
+    session: CaptureSession,
+    project: Project,
+    payload: dict[str, Any],
+) -> Screen:
+    """Simpan hasil capture yang diambil worker lokal di perangkat operator.
+
+    Alur: browser operator memanggil worker di perangkatnya sendiri, lalu
+    mengunggah hasilnya ke backend. Dengan begitu jendela browser muncul di
+    perangkat yang dipakai operator - bukan di mesin server.
+    """
+    import base64
+    import hashlib
+
+    raw = payload.get("png_base64") or ""
+    if not raw:
+        raise ConflictError("Data gambar tidak terkirim (png_base64 kosong).")
+
+    try:
+        png = base64.b64decode(raw, validate=False)
+    except Exception as exc:  # noqa: BLE001
+        raise ConflictError("Data gambar tidak valid.") from exc
+
+    digest = hashlib.sha256(png).hexdigest()
+    label = slugify(str(payload.get("title") or "screen")) or "screen"
+    relative_dir = f"captures/project-{project.id}/session-{session.id}"
+    target = settings.storage_path / relative_dir
+    target.mkdir(parents=True, exist_ok=True)
+    file_path = target / f"{label}-{digest[:8]}.png"
+    file_path.write_bytes(png)
+
+    meta = {
+        "file_path": str(file_path),
+        "url": payload.get("url"),
+        "title": payload.get("page_title") or payload.get("title"),
+        "full_page": bool(payload.get("full_page")),
+        "elements": payload.get("elements") or [],
+        "structure": payload.get("structure") or {},
+        "interactions": payload.get("interactions") or [],
+    }
+    return record_capture(db, session, project, meta, title=payload.get("title"))
+
+
 def create_session(
     db: Session,
     project: Project,

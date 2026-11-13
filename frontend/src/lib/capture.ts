@@ -11,6 +11,7 @@ export interface CaptureSession {
   status: string
   viewport_width: number
   viewport_height: number
+  device?: string
   browser_mode: string
   started_at: string | null
   ended_at: string | null
@@ -105,6 +106,16 @@ export const captureApi = {
     device: 'desktop' | 'tablet' | 'phone' = 'desktop',
   ) =>
     api.post<CaptureSession>(`/projects/${projectId}/capture-sessions`, { notes, device }),
+  launchConfig: (sessionId: number) =>
+    api.get<{
+      url: string
+      allowed_hosts: string[]
+      viewport_width: number | null
+      viewport_height: number | null
+      device: string
+    }>(`/capture-sessions/${sessionId}/launch-config`),
+  importCapture: (sessionId: number, payload: Record<string, unknown>) =>
+    api.post<Screen>(`/capture-sessions/${sessionId}/capture/import`, payload),
   start: (sessionId: number) => api.post<CaptureSession>(`/capture-sessions/${sessionId}/start`),
   pause: (sessionId: number) => api.post<CaptureSession>(`/capture-sessions/${sessionId}/pause`),
   resume: (sessionId: number) => api.post<CaptureSession>(`/capture-sessions/${sessionId}/resume`),
@@ -116,6 +127,53 @@ export const captureApi = {
     if (title) query.set('title', title)
     return api.post<Screen>(`/capture-sessions/${sessionId}/capture?${query.toString()}`)
   },
+}
+
+/**
+ * Panggil Capture Worker yang berjalan DI PERANGKAT OPERATOR itu sendiri
+ * (http://127.0.0.1:8010), bukan lewat backend server.
+ *
+ * Dengan begitu, saat operator membuka panel admin dari HP atau laptop lain,
+ * jendela browser akan terbuka di perangkat yang bersangkutan — bukan di mesin
+ * yang menjalankan backend. Worker hanya listen di loopback (127.0.0.1), jadi
+ * hanya browser pada perangkat yang sama yang bisa memanggilnya.
+ */
+const WORKER_URL = import.meta.env.VITE_WORKER_URL ?? 'http://127.0.0.1:8010'
+
+async function workerRequest(path: string, init: RequestInit = {}): Promise<unknown> {
+  const res = await fetch(`${WORKER_URL}${path}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...init.headers },
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || `Worker tidak merespons (${res.status})`)
+  }
+  return res.json()
+}
+
+export const workerApi = {
+  startSession: (body: {
+    url: string
+    viewport_width?: number | null
+    viewport_height?: number | null
+    allowed_hosts: string[]
+    device: string
+  }) =>
+    workerRequest('/session/start', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  capture: (body: { label?: string; full_page?: boolean; include_image?: boolean }) =>
+    workerRequest('/session/capture', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  state: () => workerRequest('/session/state'),
+  focus: () => workerRequest('/session/focus', { method: 'POST', body: '{}' }),
+  pause: () => workerRequest('/session/pause', { method: 'POST', body: '{}' }),
+  resume: () => workerRequest('/session/resume', { method: 'POST', body: '{}' }),
+  stop: () => workerRequest('/session/stop', { method: 'POST', body: '{}' }),
 }
 
 export const screensApi = {

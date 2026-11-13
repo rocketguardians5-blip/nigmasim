@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { applicationsApi, projectsApi, ApiError } from '../lib/api'
 import type { Application, Project } from '../lib/api'
-import { captureApi, screensApi } from '../lib/capture'
+import { captureApi, screensApi, workerApi } from '../lib/capture'
 import type { CaptureSession, Screen, WorkerState } from '../lib/capture'
 import { useAuth } from '../lib/auth'
 import {
@@ -35,6 +35,7 @@ export function CaptureStudioPage() {
   const [screens, setScreens] = useState<Screen[]>([])
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [workerError, setWorkerError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [focusing, setFocusing] = useState(false)
   const [device, setDevice] = useState<'desktop' | 'tablet' | 'phone'>('desktop')
@@ -88,15 +89,19 @@ export function CaptureStudioPage() {
     void loadScreens()
   }, [loadScreens])
 
-  // Polling status worker selama sesi berjalan
+  // Polling status worker di PERANGKAT INI (bukan worker di server).
   useEffect(() => {
     if (!session || session.status !== 'running') return
     const timer = setInterval(() => {
       void (async () => {
         try {
-          setWorkerState(await captureApi.state(session.id))
+          const st = await workerApi.state()
+          setWorkerState(st as WorkerState)
+          setWorkerError(null)
         } catch {
-          /* worker mungkin mati */
+          setWorkerError(
+            'Worker capture tidak aktif di perangkat ini. Jalankan capture worker (port 8010) di perangkat yang ingin membuka browser.',
+          )
         }
       })()
     }, 3000)
@@ -130,37 +135,62 @@ export function CaptureStudioPage() {
   async function startBrowser() {
     if (!session) return
     await run(async () => {
-      const updated = await captureApi.start(session.id)
-      setSession(updated)
-    }, 'Browser dibuka. Silakan login secara manual di jendela browser.')
+      const cfg = await captureApi.launchConfig(session.id)
+      await workerApi.startSession({
+        url: cfg.url,
+        viewport_width: cfg.viewport_width,
+        viewport_height: cfg.viewport_height,
+        allowed_hosts: cfg.allowed_hosts,
+        device: cfg.device,
+      })
+      setSession((prev) => (prev ? { ...prev, status: 'running' } : prev))
+      setWorkerError(null)
+    }, 'Browser dibuka di perangkat ini. Silakan login secara manual di jendela browser.')
   }
 
   async function focusBrowser() {
     if (!session) return
     setFocusing(true)
     try {
-      await captureApi.focus(session.id)
+      await workerApi.focus()
       setNotice('Jendela browser dimunculkan ke depan.')
+      setWorkerError(null)
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Gagal memfokuskan jendela browser')
+      setWorkerError(err instanceof Error ? err.message : 'Gagal memfokuskan jendela browser')
     } finally {
       setFocusing(false)
     }
   }
 
-  async function captureScreen() {    if (!session) return
+  async function captureScreen() {
+    if (!session) return
     await run(async () => {
-      const screen = await captureApi.capture(session.id)
+      const meta: any = await workerApi.capture({
+        label: 'screen',
+        full_page: false,
+        include_image: true,
+      })
+      const screen = await captureApi.importCapture(session.id, {
+        url: meta.url,
+        title: meta.title,
+        full_page: meta.full_page,
+        png_base64: meta.png_base64,
+        elements: meta.elements,
+        structure: meta.structure,
+        interactions: meta.interactions,
+      })
       setScreens((prev) => [screen, ...prev])
-    }, 'Screenshot tersimpan. Jangan lupa cek dan mask data sensitif.')
+      setWorkerError(null)
+    }, 'Screenshot tersimpan di perangkat ini. Jangan lupa cek dan mask data sensitif.')
   }
 
   async function stopSession() {
     if (!session) return
     await run(async () => {
-      const updated = await captureApi.stop(session.id)
-      setSession(updated)
+      await workerApi.stop()
+      setSession((prev) => (prev ? { ...prev, status: 'stopped' } : prev))
       setWorkerState(null)
+      setWorkerError(null)
     }, 'Sesi capture dihentikan.')
   }
 
@@ -182,6 +212,11 @@ export function CaptureStudioPage() {
       {error && (
         <div className="mb-4">
           <Alert tone="danger" title="Gagal">{error}</Alert>
+        </div>
+      )}
+      {workerError && (
+        <div className="mb-4">
+          <Alert tone="danger" title="Worker capture tidak tersedia">{workerError}</Alert>
         </div>
       )}
 
@@ -281,14 +316,26 @@ export function CaptureStudioPage() {
                   </Button>
                   <Button
                     variant="secondary"
-                    onClick={() => void run(() => captureApi.pause(session.id), 'Sesi dijeda.')}
+                    onClick={() =>
+                      void workerApi.pause().then(() => {
+                        setSession((prev) => (prev ? { ...prev, status: 'paused' } : prev))
+                        setWorkerError(null)
+                        setNotice('Sesi dijeda.')
+                      })
+                    }
                     loading={busy}
                   >
                     Jeda
                   </Button>
                   <Button
                     variant="secondary"
-                    onClick={() => void run(() => captureApi.resume(session.id), 'Sesi dilanjutkan.')}
+                    onClick={() =>
+                      void workerApi.resume().then(() => {
+                        setSession((prev) => (prev ? { ...prev, status: 'running' } : prev))
+                        setWorkerError(null)
+                        setNotice('Sesi dilanjutkan.')
+                      })
+                    }
                     loading={busy}
                   >
                     Lanjutkan
@@ -327,13 +374,15 @@ export function CaptureStudioPage() {
 
             <div className="mt-4 rounded border border-slate-200 bg-slate-50 p-3">
               <p className="text-xs leading-relaxed text-slate-600">
-                <strong className="font-medium text-slate-700">Cara pakai:</strong> tekan "Buka Browser",
-                lalu jendela <strong className="font-medium text-slate-700">Chromium terpisah</strong> akan
-                muncul (bukan tab di Chrome Anda — ini disengaja agar profil & cookie pribadi Anda
-                tidak tersentuh). Butuh 2–5 detik. Kalau jendelanya tersembunyi di belakang,
-                tekan <strong className="font-medium text-slate-700">"Fokuskan jendela"</strong>.
-                Login sendiri dengan akun resmi — NigmaSim tidak pernah menyimpan kredensial.
-                Setelah sampai halaman yang ingin diambil, tekan "Ambil Screenshot" di halaman ini.
+                <strong className="font-medium text-slate-700">Cara pakai:</strong> pastikan Capture Worker
+                berjalan di <strong className="font-medium text-slate-700">perangkat yang sama</strong> di mana
+                Anda ingin browser muncul (laptop Anda sendiri, atau HP jika worker dijalankan di HP). Tekan
+                "Buka Browser" — jendela <strong className="font-medium text-slate-700">Chromium terpisah</strong>
+                akan terbuka di perangkat itu (bukan tab Chrome Anda — disengaja agar profil & cookie pribadi
+                Anda tidak tersentuh). Butuh 2–5 detik. Kalau jendelanya tersembunyi di belakang, tekan
+                <strong className="font-medium text-slate-700">"Fokuskan jendela"</strong>. Login sendiri dengan
+                akun resmi — NigmaSim tidak pernah menyimpan kredensial. Setelah sampai halaman yang ingin diambil,
+                tekan "Ambil Screenshot" di halaman ini.
               </p>
             </div>
           </>
