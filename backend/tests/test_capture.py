@@ -68,14 +68,39 @@ def test_session_requires_authorized_app(
     assert blocked_project.status_code == 409
 
 
+def test_capture_device_profile(
+    client: TestClient, auth_headers: dict[str, str], authorized_app: dict, monkeypatch
+) -> None:
+    """Preset perangkat diteruskan ke worker (untuk capture tampilan mobile)."""
+    calls: dict = {}
+
+    def fake_start(url, width, height, hosts, device="desktop"):
+        calls["device"] = device
+        return {"status": "active"}
+
+    monkeypatch.setattr("app.api.v1.capture.capture_client.start_session", fake_start)
+
+    session = client.post(
+        f"/api/v1/projects/{authorized_app['project_id']}/capture-sessions",
+        headers=auth_headers,
+        json={"device": "phone"},
+    )
+    assert session.status_code == 201, session.text
+    assert session.json()["device"] == "phone"
+
+    client.post(f"/api/v1/capture-sessions/{session.json()['id']}/start", headers=auth_headers)
+    assert calls["device"] == "phone"
+
+
 def test_create_session_and_start(
     client: TestClient, auth_headers: dict[str, str], authorized_app: dict, monkeypatch
 ) -> None:
     calls: dict = {}
 
-    def fake_start(url, width, height, hosts):
+    def fake_start(url, width, height, hosts, device="desktop"):
         calls["url"] = url
         calls["hosts"] = hosts
+        calls["device"] = device
         return {"status": "active", "session_id": "cap_1"}
 
     monkeypatch.setattr("app.api.v1.capture.capture_client.start_session", fake_start)

@@ -24,6 +24,7 @@ class StartRequest(BaseModel):
     viewport_width: int | None = None
     viewport_height: int | None = None
     allowed_hosts: list[str] = Field(default_factory=list)
+    device: str = "desktop"
 
 
 class CaptureRequest(BaseModel):
@@ -54,6 +55,7 @@ def start(payload: StartRequest, x_worker_token: str | None = Header(default=Non
             viewport_width=payload.viewport_width,
             viewport_height=payload.viewport_height,
             allowed_hosts=payload.allowed_hosts,
+            device=payload.device,
         )
     except CaptureError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc

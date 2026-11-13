@@ -37,6 +37,7 @@ export function CaptureStudioPage() {
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [focusing, setFocusing] = useState(false)
+  const [device, setDevice] = useState<'desktop' | 'tablet' | 'phone'>('desktop')
 
   // Muat daftar aplikasi
   useEffect(() => {
@@ -120,7 +121,7 @@ export function CaptureStudioPage() {
   async function createSession() {
     if (!projectId) return
     await run(async () => {
-      const created = await captureApi.createSession(projectId, 'Sesi dari Capture Studio')
+      const created = await captureApi.createSession(projectId, 'Sesi dari Capture Studio', device)
       setSession(created)
       setWorkerState(null)
     }, 'Sesi capture dibuat. Klik "Buka Browser" untuk memulai.')
@@ -240,6 +241,20 @@ export function CaptureStudioPage() {
           <Alert tone="warning">Akun Anda tidak memiliki izin menjalankan capture.</Alert>
         ) : (
           <>
+            <div className="mb-4 flex flex-wrap items-end gap-3">
+              <Field label="Tampilan perangkat" hint="Emulasi ukuran layar saat capture.">
+                <select
+                  className="input min-w-[190px]"
+                  value={device}
+                  onChange={(e) => setDevice(e.target.value as 'desktop' | 'tablet' | 'phone')}
+                >
+                  <option value="desktop">Desktop · 1440×900</option>
+                  <option value="tablet">Tablet · 820×1180 (touch)</option>
+                  <option value="phone">HP · 390×844 (touch)</option>
+                </select>
+              </Field>
+            </div>
+
             <div className="flex flex-wrap items-center gap-2">
               {!session && (
                 <Button onClick={() => void createSession()} disabled={!projectId} loading={busy}>

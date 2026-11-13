@@ -12,6 +12,8 @@ class CaptureSessionCreate(BaseModel):
     notes: str | None = None
     viewport_width: int | None = Field(default=None, ge=320, le=3840)
     viewport_height: int | None = Field(default=None, ge=240, le=2160)
+    # Preset perangkat: desktop / tablet / phone
+    device: str = Field(default="desktop", pattern="^(desktop|tablet|phone)$")
 
 
 class CaptureSessionOut(BaseModel):
@@ -23,6 +25,7 @@ class CaptureSessionOut(BaseModel):
     status: str
     viewport_width: int
     viewport_height: int
+    device: str = "desktop"
     browser_mode: str
     started_at: datetime | None = None
     ended_at: datetime | None = None

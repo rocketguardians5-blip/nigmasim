@@ -219,6 +219,39 @@ EXTRACT_STRUCTURE = """
 """
 
 
+# Preset perangkat: emulasi tampilan mobile/tablet di browser desktop.
+# Dipakai saat capture aplikasi web yang punya versi mobile.
+DEVICE_PRESETS: dict[str, dict[str, Any]] = {
+    "desktop": {
+        "viewport": {"width": 1440, "height": 900},
+        "is_mobile": False,
+        "has_touch": False,
+        "user_agent": None,
+        "device_scale_factor": 1,
+    },
+    "tablet": {
+        "viewport": {"width": 820, "height": 1180},
+        "is_mobile": True,
+        "has_touch": True,
+        "user_agent": (
+            "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 "
+            "(KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        ),
+        "device_scale_factor": 2,
+    },
+    "phone": {
+        "viewport": {"width": 390, "height": 844},
+        "is_mobile": True,
+        "has_touch": True,
+        "user_agent": (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 "
+            "(KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        ),
+        "device_scale_factor": 3,
+    },
+}
+
+
 class BrowserManager:
     """Mengelola satu sesi browser pada satu waktu."""
 
@@ -237,6 +270,7 @@ class BrowserManager:
         viewport_width: int | None = None,
         viewport_height: int | None = None,
         allowed_hosts: list[str] | None = None,
+        device: str = "desktop",
     ) -> Session:
         if self.session and self.session.status in {"active", "paused"}:
             raise CaptureError("Sesi capture sudah berjalan. Hentikan dulu sebelum memulai yang baru.")
@@ -263,14 +297,22 @@ class BrowserManager:
             # dan tidak tersembunyi di belakang jendela lain.
             args=["--window-position=30,30", "--window-size=1476,986"],
         )
-        self._context = self._browser.new_context(
-            viewport={
-                "width": viewport_width or settings.default_viewport_width,
-                "height": viewport_height or settings.default_viewport_height,
+        preset = DEVICE_PRESETS.get((device or "desktop").lower(), DEVICE_PRESETS["desktop"])
+        context_args: dict[str, Any] = {
+            "viewport": {
+                "width": viewport_width or preset["viewport"]["width"],
+                "height": viewport_height or preset["viewport"]["height"],
             },
+            "is_mobile": preset["is_mobile"],
+            "has_touch": preset["has_touch"],
+            "device_scale_factor": preset["device_scale_factor"],
             # Jangan pernah memuat state login milik siapa pun.
-            storage_state=None,
-        )
+            "storage_state": None,
+        }
+        if preset.get("user_agent"):
+            context_args["user_agent"] = preset["user_agent"]
+
+        self._context = self._browser.new_context(**context_args)
         self._context.add_init_script(INIT_SCRIPT)
 
         page = self._context.new_page()

@@ -34,6 +34,8 @@ class CaptureSession(Base):
     status: Mapped[str] = mapped_column(String(20), default="active", nullable=False, index=True)
     viewport_width: Mapped[int] = mapped_column(Integer, default=1440, nullable=False)
     viewport_height: Mapped[int] = mapped_column(Integer, default=900, nullable=False)
+    # Preset perangkat: desktop / tablet / phone
+    device: Mapped[str] = mapped_column(String(20), default="desktop", nullable=False)
     browser_mode: Mapped[str] = mapped_column(String(20), default="headed", nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime)

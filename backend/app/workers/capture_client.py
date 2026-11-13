@@ -61,9 +61,10 @@ def worker_health() -> dict[str, Any]:
 
 def start_session(
     url: str,
-    viewport_width: int,
-    viewport_height: int,
+    viewport_width: int | None,
+    viewport_height: int | None,
     allowed_hosts: list[str],
+    device: str = "desktop",
 ) -> dict[str, Any]:
     return _call(
         "POST",
@@ -73,6 +74,7 @@ def start_session(
             "viewport_width": viewport_width,
             "viewport_height": viewport_height,
             "allowed_hosts": allowed_hosts,
+            "device": device,
         },
     )
 

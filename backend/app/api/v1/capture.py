@@ -75,6 +75,7 @@ def create_session(
         notes=payload.notes,
         viewport_width=payload.viewport_width,
         viewport_height=payload.viewport_height,
+        device=payload.device,
     )
     audit.record(
         db,
@@ -145,9 +146,10 @@ def start_session(
     try:
         capture_client.start_session(
             start_url,
-            session.viewport_width,
-            session.viewport_height,
+            session.viewport_width or None,
+            session.viewport_height or None,
             hosts,
+            session.device or "desktop",
         )
     except (WorkerUnavailableError, WorkerError) as exc:
         raise _worker_or_503(exc) from exc

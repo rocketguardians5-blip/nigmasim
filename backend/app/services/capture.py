@@ -42,6 +42,7 @@ def create_session(
     notes: str | None = None,
     viewport_width: int | None = None,
     viewport_height: int | None = None,
+    device: str = "desktop",
 ) -> CaptureSession:
     application = db.get(Application, project.application_id)
     if application is None:
@@ -51,12 +52,16 @@ def create_session(
             "Aplikasi belum memiliki otorisasi capture (status harus approved)."
         )
 
+    # Untuk tablet/phone, ukuran layar dipakai worker (preset perangkat).
+    is_desktop = device == "desktop"
+
     session = CaptureSession(
         project_id=project.id,
         operator_id=operator.id,
         status="active",
-        viewport_width=viewport_width or settings.capture_default_viewport_width,
-        viewport_height=viewport_height or settings.capture_default_viewport_height,
+        viewport_width=viewport_width or (settings.capture_default_viewport_width if is_desktop else 0),
+        viewport_height=viewport_height or (settings.capture_default_viewport_height if is_desktop else 0),
+        device=device,
         browser_mode="headed",
         started_at=now_utc(),
         notes=notes,

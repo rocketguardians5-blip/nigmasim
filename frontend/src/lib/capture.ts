@@ -99,8 +99,12 @@ export interface WorkerState {
 export const captureApi = {
   listSessions: (projectId: number) =>
     api.get<{ items: CaptureSession[]; total: number }>(`/projects/${projectId}/capture-sessions`),
-  createSession: (projectId: number, notes?: string) =>
-    api.post<CaptureSession>(`/projects/${projectId}/capture-sessions`, { notes }),
+  createSession: (
+    projectId: number,
+    notes?: string,
+    device: 'desktop' | 'tablet' | 'phone' = 'desktop',
+  ) =>
+    api.post<CaptureSession>(`/projects/${projectId}/capture-sessions`, { notes, device }),
   start: (sessionId: number) => api.post<CaptureSession>(`/capture-sessions/${sessionId}/start`),
   pause: (sessionId: number) => api.post<CaptureSession>(`/capture-sessions/${sessionId}/pause`),
   resume: (sessionId: number) => api.post<CaptureSession>(`/capture-sessions/${sessionId}/resume`),
