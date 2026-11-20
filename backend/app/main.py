@@ -33,6 +33,27 @@ async def lifespan(_: FastAPI):
             )
         with SessionLocal() as db:
             seed(db)
+            try:
+                from app.db.session import now_utc
+                from app.models.capture import CaptureSession
+
+                stuck_sessions = (
+                    db.query(CaptureSession)
+                    .filter(CaptureSession.status.in_(["active", "running"]))
+                    .all()
+                )
+                if stuck_sessions:
+                    for s in stuck_sessions:
+                        s.status = "stopped"
+                        if not s.ended_at:
+                            s.ended_at = now_utc()
+                    db.commit()
+                    logger.info(
+                        "Rekonsiliasi startup: %d sesi capture menggantung diubah menjadi stopped",
+                        len(stuck_sessions),
+                    )
+            except Exception as e:
+                logger.warning("Gagal rekonsiliasi sesi capture saat startup: %s", e)
     yield
 
 
@@ -64,6 +85,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    allow_origin_regex=r"^https?://.*" if settings.is_development else None,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],

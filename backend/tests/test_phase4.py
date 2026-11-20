@@ -96,8 +96,9 @@ def test_create_simulation_requires_approved_reconstruction(
     client: TestClient, auth_headers: dict[str, str], project_id: int
 ) -> None:
     response = client.post(
-        f"/api/v1/simulation/project/{project_id}?name=Demo",
+        f"/api/v1/simulation/project/{project_id}",
         headers=auth_headers,
+        json={"name": "Demo"},
     )
     assert response.status_code == 409
     assert "disetujui" in response.json()["error"]["message"].lower()
@@ -109,8 +110,9 @@ def test_build_simulation_from_reconstruction(
     _approved_reconstruction(project_id)
 
     response = client.post(
-        f"/api/v1/simulation/project/{project_id}?name=Demo%20Proyek",
+        f"/api/v1/simulation/project/{project_id}",
         headers=auth_headers,
+        json={"name": "Demo Proyek"},
     )
     assert response.status_code == 201, response.text
     definition = response.json()
@@ -143,8 +145,9 @@ def test_dataset_crud_and_reset(
 ) -> None:
     _approved_reconstruction(project_id)
     definition = client.post(
-        f"/api/v1/simulation/project/{project_id}?name=Demo",
+        f"/api/v1/simulation/project/{project_id}",
         headers=auth_headers,
+        json={"name": "Demo"},
     ).json()
     sim_id = definition["id"]
     dataset_name = next(iter(definition["datasets"]))
@@ -193,8 +196,9 @@ def test_bulk_import_rows(
 ) -> None:
     _approved_reconstruction(project_id)
     definition = client.post(
-        f"/api/v1/simulation/project/{project_id}?name=Demo",
+        f"/api/v1/simulation/project/{project_id}",
         headers=auth_headers,
+        json={"name": "Demo"},
     ).json()
     sim_id = definition["id"]
     dataset_name = next(iter(definition["datasets"]))
@@ -218,10 +222,14 @@ def test_rebuild_replaces_previous_simulation(
 ) -> None:
     _approved_reconstruction(project_id)
     first = client.post(
-        f"/api/v1/simulation/project/{project_id}?name=Versi 1", headers=auth_headers
+        f"/api/v1/simulation/project/{project_id}",
+        headers=auth_headers,
+        json={"name": "Versi 1"},
     ).json()
     second = client.post(
-        f"/api/v1/simulation/project/{project_id}?name=Versi 2", headers=auth_headers
+        f"/api/v1/simulation/project/{project_id}",
+        headers=auth_headers,
+        json={"name": "Versi 2"},
     ).json()
 
     # Rebuild memperbarui simulasi yang sama (id stabil), bukan membuat duplikat

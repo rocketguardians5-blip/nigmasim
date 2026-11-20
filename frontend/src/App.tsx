@@ -11,6 +11,7 @@ import { PlaceholderPage } from './pages/Placeholder'
 import { CaptureStudioPage } from './pages/CaptureStudio'
 import { ScreenRepositoryPage } from './pages/ScreenRepository'
 import { UIReconstructionPage } from './pages/UIReconstruction'
+import { ReconstructionWizardPage } from './pages/ReconstructionWizard'
 import { SimulationBuilderPage } from './pages/SimulationBuilder'
 import { SimulationPlayerPage } from './pages/SimulationPlayer'
 import { WorkflowBuilderPage } from './pages/WorkflowBuilder'
@@ -92,6 +93,7 @@ export function App() {
         <Route path="/capture" element={<CaptureStudioPage />} />
         <Route path="/screens" element={<ScreenRepositoryPage />} />
         <Route path="/reconstruction" element={<UIReconstructionPage />} />
+        <Route path="/reconstruction/wizard" element={<ReconstructionWizardPage />} />
         <Route path="/simulation" element={<SimulationBuilderPage />} />
         <Route path="/simulation/play/:projectId" element={<SimulationPlayerPage />} />
         <Route path="/workflow" element={<WorkflowBuilderPage />} />

@@ -18,6 +18,8 @@ os.environ["ADMIN_EMAIL"] = "admin@nigmasim.com"
 os.environ["ADMIN_INITIAL_PASSWORD"] = "AdminTest#123"
 # Test harus selalu menolak host internal, apa pun isi .env lokal.
 os.environ["ALLOW_PRIVATE_HOSTS_IN_REGISTRY"] = "false"
+# Tes tidak boleh memanggil Gemini sungguhan (biaya/kuota + tidak deterministik).
+os.environ["GEMINI_API_KEY"] = ""
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

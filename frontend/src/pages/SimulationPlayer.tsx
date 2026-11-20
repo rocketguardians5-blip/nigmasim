@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { ApiError } from '../lib/api'
+import { screensApi } from '../lib/capture'
 import { simulationApi, tutorialApi, workflowApi } from '../lib/simulation'
 import type {
   SimRow,
@@ -9,8 +10,8 @@ import type {
   WorkflowDefinition,
   WorkflowRecord,
 } from '../lib/simulation'
-import { Alert, Badge, Button, Card, EmptyState, Spinner } from '../components/ui'
-import { IconCheck, IconExternal, IconSearch } from '../components/icons'
+import { Alert, Badge, Button, Card, EmptyState, Spinner, cn } from '../components/ui'
+import { IconSearch } from '../components/icons'
 
 const ROLES = [
   { key: 'staf', label: 'Staf' },
@@ -34,6 +35,7 @@ export function SimulationPlayerPage() {
   const [workflow, setWorkflow] = useState<WorkflowDefinition | null>(null)
   const [records, setRecords] = useState<WorkflowRecord[]>([])
   const [tutorials, setTutorials] = useState<Tutorial[]>([])
+  const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null)
 
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState<string | null>(null)
@@ -52,13 +54,23 @@ export function SimulationPlayerPage() {
     null,
   )
   const [spotlightMissing, setSpotlightMissing] = useState(false)
+  const [showHotspots, setShowHotspots] = useState(false)
+
+  // Dropdown & Input Data state (persisted during simulation session)
+  const [dropdownStates, setDropdownStates] = useState<Record<string, string>>({})
+  const [openDropdownId, setOpenDropdownId] = useState<number | null>(null)
+  const [inputDataStates, setInputDataStates] = useState<Record<string, any>>({})
 
   const load = useCallback(async () => {
     if (!projectId) return
     try {
       const data = await simulationApi.getByProject(Number(projectId))
       setDefinition(data)
-      setScreenKey((current) => current ?? data.screens[0]?.key ?? null)
+      const urlScreen = params.get('screen')
+      const initialScreen = urlScreen && data.screens.some(s => s.key === urlScreen)
+        ? urlScreen
+        : data.screens[0]?.key ?? null
+      setScreenKey(initialScreen)
 
       try {
         const flow = await workflowApi.get(data.id)
@@ -88,6 +100,23 @@ export function SimulationPlayerPage() {
     () => definition?.screens.find((item) => item.key === screenKey),
     [definition, screenKey],
   )
+
+  // Muat screenshot untuk layar yang dipakai di visual clone mode
+  useEffect(() => {
+    const srcId = screen?.source_screen_id ?? null
+    if (!srcId) {
+      setScreenshotUrl(null)
+      return
+    }
+    void (async () => {
+      try {
+        const url = await screensApi.screenshotUrl(srcId, true)
+        setScreenshotUrl(url)
+      } catch {
+        setScreenshotUrl(null)
+      }
+    })()
+  }, [screen?.source_screen_id])
 
   const datasetName = screen?.layout.table?.dataset ?? screen?.layout.form?.dataset ?? null
   const dataset = datasetName ? definition?.datasets[datasetName] : undefined
@@ -298,12 +327,44 @@ export function SimulationPlayerPage() {
     }
   }
 
+  // Handlers for dropdown & input_data
+  const handleDropdownSelect = useCallback((hotspotId: number, value: string) => {
+    setDropdownStates(prev => ({ ...prev, [hotspotId]: value }))
+    setOpenDropdownId(null)
+  }, [])
+
+  const handleInputDataChange = useCallback((hotspotId: number, value: any) => {
+    setInputDataStates(prev => ({ ...prev, [hotspotId]: value }))
+  }, [])
+
+  const handleClickOutside = useCallback((e: MouseEvent) => {
+    // Close dropdown if click outside
+    setOpenDropdownId(null)
+  }, [])
+
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setOpenDropdownId(null)
+    }
+  }, [])
+
+  useEffect(() => {
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [handleClickOutside, handleKeyDown])
+
   async function resetData() {
     if (!definition) return
     if (!window.confirm('Kembalikan semua data ke kondisi awal?')) return
     try {
       const result = await simulationApi.reset(definition.id)
       setNotice(result.message)
+      setDropdownStates({})
+      setInputDataStates({})
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Gagal reset data')
@@ -451,6 +512,16 @@ export function SimulationPlayerPage() {
             )}
 
             <Badge tone="info">Simulasi</Badge>
+            {screen?.layout.visual_mode && (
+              <Button
+                size="sm"
+                variant={showHotspots ? 'primary' : 'secondary'}
+                onClick={() => setShowHotspots((v) => !v)}
+                title="Tampilkan garis bantu area klik interaktif"
+              >
+                {showHotspots ? 'Garis Klik: Aktif' : 'Lihat Area Klik'}
+              </Button>
+            )}
             <Button size="sm" variant="secondary" onClick={() => void resetData()}>
               Reset data
             </Button>
@@ -463,11 +534,42 @@ export function SimulationPlayerPage() {
         </header>
 
         <main className="flex-1 overflow-y-auto px-4 py-6 lg:px-6">
-          <div className="mx-auto max-w-5xl space-y-4">
-            {notice && <Alert tone="success">{notice}</Alert>}
-            {error && <Alert tone="danger">{error}</Alert>}
+          {/* --- VISUAL CLONE MODE: screenshot sebagai background + hotspot klik --- */}
+          {screen?.layout.visual_mode && screenshotUrl && (
+            <VisualClone
+              screenshotUrl={screenshotUrl}
+              viewport={screen.layout.viewport ?? { width: 1440, height: 900 }}
+              hotspots={screen.layout.hotspots ?? []}
+              showHotspots={showHotspots}
+              onNavigate={(key) => switchScreen(key)}
+              onUnmapped={(label) =>
+                setNotice(
+                  'Area «' + label + '» belum diarahkan ke layar tujuan. Atur di Simulation Builder.',
+                )
+              }
+              dropdownStates={dropdownStates}
+              openDropdownId={openDropdownId}
+              setOpenDropdownId={setOpenDropdownId}
+              onDropdownSelect={(hotspotId, value) => setDropdownStates({ ...dropdownStates, [hotspotId]: value })}
+              inputDataStates={inputDataStates}
+              onInputDataChange={(hotspotId, value) => setInputDataStates({ ...inputDataStates, [hotspotId]: value })}
+            />
+          )}
 
-            {cards.length > 0 && (
+          {/* --- MODE GENERIK (default) --- */}
+          {!screen?.layout.visual_mode && (
+            <div className="mx-auto max-w-5xl space-y-4">
+              {notice && <Alert tone="success">{notice}</Alert>}
+              {error && <Alert tone="danger">{error}</Alert>}
+
+              <Alert tone="info" title="Mode tampilan generik">
+                Layar ini memakai tampilan generik (kartu & tabel data dummy), bukan klon visual dari
+                tangkapan layar. Untuk menampilkannya persis seperti capture, buka <strong>Simulation
+                Builder</strong> &rarr; centang <strong>Clone visual</strong> &rarr; klik{' '}
+                <strong>Bangun ulang</strong>.
+              </Alert>
+
+              {cards.length > 0 && (
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {cards.map((card) => (
                   <div key={card.label} className="card px-4 py-3.5" data-sim-card={card.label}>
@@ -557,7 +659,7 @@ export function SimulationPlayerPage() {
                                         key={action.action}
                                         type="button"
                                         onClick={() => void runTransition(row, action.action, action.label)}
-                                        className="rounded border border-slate-300 px-2 py-0.5 text-[11px] font-medium text-slate-700 transition-colors hover:border-brand-500 hover:text-brand-700"
+                                        className="rounded border border-slate-300 px-2 py-0.5 text-[11px] font-medium text-slate-700 transition-colors hover:border-[#4268ff] hover:text-[#4268ff]"
                                       >
                                         {action.label}
                                       </button>
@@ -569,7 +671,7 @@ export function SimulationPlayerPage() {
                                 <button
                                   type="button"
                                   onClick={() => openEdit(row)}
-                                  className="rounded px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50"
+                                  className="rounded px-2 py-1 text-xs font-medium text-[#4268ff] hover:bg-[#4268ff]/10"
                                 >
                                   Ubah
                                 </button>
@@ -654,7 +756,6 @@ export function SimulationPlayerPage() {
                   </div>
                   <div className="flex gap-2 pt-1">
                     <Button type="submit">
-                      <IconCheck size={14} />
                       {screen.layout.form.submit_label ?? 'Simpan'}
                     </Button>
                     <Button type="button" variant="secondary" onClick={() => setFormOpen(false)}>
@@ -670,12 +771,12 @@ export function SimulationPlayerPage() {
                 {(screen?.layout.buttons ?? []).map((button) => (
                   <Button key={button.label} variant="secondary" data-sim-button={button.label}>
                     {button.label}
-                    <IconExternal size={12} />
                   </Button>
                 ))}
               </div>
             )}
           </div>
+        )}
         </main>
       </div>
 
@@ -757,6 +858,238 @@ export function SimulationPlayerPage() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * Visual Clone: menampilkan tangkapan layar asli sebagai background lalu menaruh
+ * area klik transparan di atasnya pada posisi persis seperti elemen aslinya.
+ *
+ * Semua posisi memakai PERSENTAGE terhadap viewport capture, jadi tampilan tetap
+ * presisi meski ukuran layar berbeda (tidak gepeng, tidak terpotong).
+ */
+function VisualClone({
+  screenshotUrl,
+  hotspots,
+  showHotspots = false,
+  onNavigate,
+  onUnmapped,
+  dropdownStates = {},
+  openDropdownId = null,
+  setOpenDropdownId = () => {},
+  onDropdownSelect = () => {},
+  inputDataStates = {},
+  onInputDataChange = () => {},
+}: {
+  screenshotUrl: string
+  viewport?: { width: number; height: number }
+  hotspots: Array<{
+    id: number
+    label: string
+    type: string
+    box: { x: number; y: number; w: number; h: number }
+    target_screen_key: string | null
+    element_type?: 'button' | 'dropdown' | 'input_data'
+    config_json?: string
+    action?: string
+  }>
+  showHotspots?: boolean
+  onNavigate: (screenKey: string) => void
+  onUnmapped: (label: string) => void
+  dropdownStates?: Record<string, string>
+  openDropdownId?: number | null
+  setOpenDropdownId?: (id: number | null) => void
+  onDropdownSelect?: (hotspotId: number, value: string) => void
+  inputDataStates?: Record<string, any>
+  onInputDataChange?: (hotspotId: number, value: any) => void
+}) {
+  const safeHotspots = Array.isArray(hotspots) ? hotspots : []
+
+  // Parse config_json for dropdown options
+  const getDropdownOptions = (configJson?: string) => {
+    if (!configJson) return []
+    try {
+      const parsed = JSON.parse(configJson)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+
+  // Get display value for dropdown (selected value or original label)
+  const getDropdownDisplay = (hotspot: any) => {
+    const selected = dropdownStates[hotspot.id]
+    if (selected) {
+      const options = getDropdownOptions(hotspot.config_json)
+      const option = options.find((o: any) => o.value === selected)
+      return option?.label || selected
+    }
+    return hotspot.label
+  }
+
+  // Get distinct highlight color based on element_type
+  const getHighlightColor = (elementType?: string, isHover = false) => {
+    if (showHotspots) {
+      if (elementType === 'dropdown') {
+        return isHover ? 'border-amber-500 bg-amber-500/35 hover:border-amber-500' : 'border-amber-500/70 bg-amber-500/15'
+      }
+      if (elementType === 'input_data') {
+        return isHover ? 'border-emerald-500 bg-emerald-500/35 hover:border-emerald-500' : 'border-emerald-500/70 bg-emerald-500/15'
+      }
+      return isHover ? 'border-blue-500 hover:bg-blue-500/35' : 'border-blue-500/70 bg-blue-500/15'
+    }
+    if (elementType === 'dropdown') {
+      return isHover ? 'hover:border-amber-500/60 hover:bg-amber-500/20 hover:shadow-sm' : 'border-transparent bg-transparent hover:border-amber-500/60 hover:bg-amber-500/20 hover:shadow-sm'
+    }
+    if (elementType === 'input_data') {
+      return isHover ? 'hover:border-emerald-500/60 hover:bg-emerald-500/20 hover:shadow-sm' : 'border-transparent bg-transparent hover:border-emerald-500/60 hover:bg-emerald-500/20 hover:shadow-sm'
+    }
+    return isHover ? 'hover:border-blue-500/60 hover:bg-blue-500/20 hover:shadow-sm' : 'border-transparent bg-transparent hover:border-blue-500/60 hover:bg-blue-500/20 hover:shadow-sm'
+  }
+
+  return (
+    <div className="flex w-full min-w-0 justify-center">
+      {/* 1. Parent wrapper: position relative, ukuran murni mengikuti screenshot dan independen dari sidebar */}
+      <div className="relative inline-block max-w-full overflow-hidden rounded border border-slate-200 bg-slate-900 shadow-card">
+        {/* Tag <img> screenshot asli: z-0 */}
+        <img
+          src={screenshotUrl}
+          alt="Tampilan asli capture"
+          className="relative z-0 block max-w-full h-auto select-none"
+          draggable={false}
+        />
+
+        {/* 2. Container overlay hotspot: absolute inset-0 dengan z-20 agar posisi pasti di atas gambar */}
+        <div className="absolute inset-0 z-20 pointer-events-none">
+          {safeHotspots.map((hotspot) => {
+            const box = hotspot.box ?? { x: 0, y: 0, w: 0, h: 0 }
+            const target = hotspot.target_screen_key
+            const elementType = hotspot.element_type || 'button'
+            const options = getDropdownOptions(hotspot.config_json)
+            const isDropdown = elementType === 'dropdown'
+            const isInputData = elementType === 'input_data'
+            const isOpen = openDropdownId === hotspot.id
+            const displayValue = getDropdownDisplay(hotspot)
+
+            const handleClick = (e: React.MouseEvent) => {
+              e.stopPropagation()
+              if (isDropdown) {
+                setOpenDropdownId(isOpen ? null : hotspot.id)
+              } else if (isInputData) {
+                const currentValue = inputDataStates[hotspot.id]
+                const newValue = prompt(`Input data untuk: ${hotspot.label}`, currentValue ?? '')
+                if (newValue !== null) {
+                  onInputDataChange(hotspot.id, newValue)
+                }
+              } else {
+                if (target) onNavigate(target)
+                else onUnmapped(hotspot.label)
+              }
+            }
+
+            const handleKeyDown = (e: React.KeyboardEvent) => {
+              if (!isDropdown) return
+              const opts = options.map((o: any) => o.value).filter(Boolean)
+              const currentIndex = opts.indexOf(dropdownStates[hotspot.id])
+              if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                const nextIndex = (currentIndex + 1) % opts.length
+                onDropdownSelect(hotspot.id, opts[nextIndex])
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault()
+                const prevIndex = (currentIndex - 1 + opts.length) % opts.length
+                onDropdownSelect(hotspot.id, opts[prevIndex])
+              } else if (e.key === 'Enter' && currentIndex >= 0) {
+                e.preventDefault()
+                setOpenDropdownId(null)
+              } else if (e.key === 'Escape') {
+                e.preventDefault()
+                setOpenDropdownId(null)
+              }
+            }
+
+            return (
+              <div key={hotspot.id} className="absolute" style={{ left: `${box.x}%`, top: `${box.y}%`, width: `${box.w}%`, height: `${box.h}%` }}>
+                {isDropdown && isOpen && (
+                  <div
+                    className="absolute z-50 w-full mt-1 origin-top"
+                    style={{ minWidth: '160px' }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="rounded-md border border-slate-700 bg-slate-800 shadow-lg overflow-hidden">
+                      <ul className="py-1 max-h-48 overflow-auto">
+                        {options.map((option: any, index: number) => (
+                          <li key={option.value ?? index}>
+                            <button
+                              type="button"
+                              className={cn(
+                                'w-full px-3 py-2 text-left text-sm text-slate-100 transition-colors',
+                                dropdownStates[hotspot.id] === option.value
+                                  ? 'bg-amber-500/30 text-amber-300'
+                                  : 'hover:bg-slate-700'
+                              )}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onDropdownSelect(hotspot.id, option.value)
+                                if (hotspot.action) {
+                                  console.log('Execute action:', hotspot.action)
+                                }
+                              }}
+                              onKeyDown={handleKeyDown}
+                            >
+                              {option.label}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  aria-label={hotspot.label}
+                  aria-haspopup={isDropdown ? 'listbox' : undefined}
+                  aria-expanded={isDropdown ? isOpen : undefined}
+                  onClick={handleClick}
+                  onKeyDown={isDropdown ? handleKeyDown : undefined}
+                  className={cn(
+                    'group absolute cursor-pointer pointer-events-auto rounded transition-all w-full h-full',
+                    getHighlightColor(elementType, false),
+                    isDropdown && isOpen && 'shadow-md',
+                  )}
+                >
+                  <span className="pointer-events-none absolute -top-6 left-0 z-30 hidden whitespace-nowrap rounded bg-slate-900 px-2 py-0.5 text-[11px] font-medium text-white shadow-card group-hover:block">
+                    {hotspot.label}
+                  </span>
+                  {isDropdown && dropdownStates[hotspot.id] && (
+                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center px-2 text-[11px] font-medium text-amber-300 bg-amber-500/20 rounded">
+                      {displayValue}
+                    </span>
+                  )}
+                  {isInputData && inputDataStates[hotspot.id] && (
+                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center px-2 text-[11px] font-medium text-emerald-300 bg-emerald-500/20 rounded">
+                      {typeof inputDataStates[hotspot.id] === 'string'
+                        ? inputDataStates[hotspot.id].substring(0, 20)
+                        : 'Data'}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )
+          })}
+        </div>
+
+        {safeHotspots.length === 0 && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-slate-900/60 text-slate-200">
+            <p className="text-sm font-medium">Tidak ada area klik terdeteksi pada layar ini</p>
+            <p className="mt-1 text-xs text-slate-400">
+              Tambahkan di UI Reconstruction, lalu bangun ulang simulasi.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -17,6 +18,8 @@ class ComponentOut(BaseModel):
     props: dict | None = None
     order_index: int
     source: str
+    element_type: str = "button"
+    config_json: str | None = None
     notes: str | None = None
 
 
@@ -62,14 +65,48 @@ class CodeUpdate(BaseModel):
     code_text: str = Field(min_length=1)
 
 
+class ComponentCreate(BaseModel):
+    region: str = Field(default="main", max_length=30)
+    component_type: str = Field(max_length=40)
+    label: str | None = Field(default=None, max_length=200)
+    props: dict | None = None
+    element_type: str = Field(default="button", max_length=30)
+    config_json: str | None = None
+    notes: str | None = None
+
+
 class ComponentUpdate(BaseModel):
     region: str | None = Field(default=None, max_length=30)
     component_type: str | None = Field(default=None, max_length=40)
     label: str | None = Field(default=None, max_length=200)
     props: dict | None = None
+    element_type: str | None = Field(default=None, max_length=30)
+    config_json: str | None = None
     notes: str | None = None
 
 
 class ReviewRequest(BaseModel):
     status: str = Field(pattern="^(draft|in_review|approved|rejected)$")
     notes: str | None = None
+
+
+class AIAnalyzeRequest(BaseModel):
+    force_refresh: bool = False
+
+
+class AIAnalyzeResponse(BaseModel):
+    components_added: int
+    assumptions_added: int
+    layout_updated: bool
+    message: str
+
+
+class HotspotStateIn(BaseModel):
+    deleted: list[str] = []
+    overrides: dict[str, Any] = {}
+
+
+class HotspotStateOut(BaseModel):
+    deleted: list[str] = []
+    overrides: dict[str, Any] = {}
+

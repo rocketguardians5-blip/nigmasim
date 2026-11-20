@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { demoApi } from '../lib/demo'
 import type { DemoLinkPublic } from '../lib/demo'
 import { Alert, Button, Card, EmptyState, Field, PageHeader } from '../components/ui'
-import { IconLock, IconExternal, IconPlus } from '../components/icons'
+import { IconLock } from '../components/icons'
 
 export function PublicDemoPage() {
   const { token } = useParams<{ token: string }>()
@@ -93,7 +93,7 @@ export function PublicDemoPage() {
             Link: <code className="text-brand-600">{demoUrl}</code>
           </p>
           <Button onClick={() => setStage('password')} disabled={busy} loading={busy}>
-            <IconPlus size={14} /> Mulai Demo
+            Mulai Demo
           </Button>
         </div>
       )}
@@ -108,8 +108,15 @@ export function PublicDemoPage() {
               onChange={(e) => setPassword(e.target.value)}
             />
           </Field>
-          <Button type="button" onClick={() => setShowPassword(!showPassword)} variant="ghost" size="sm">
-            {showPassword ? <IconLock size={14} /> : <IconLock size={14} />}
+          <Button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            variant="ghost"
+            size="sm"
+            aria-label={showPassword ? 'Sembunyikan password' : 'Lihat password'}
+            title={showPassword ? 'Sembunyikan password' : 'Lihat password'}
+          >
+            {showPassword ? 'Sembunyikan' : 'Lihat'}
           </Button>
           <div className="mt-4 flex justify-end">
             <Button onClick={verifyPassword} loading={busy}>
@@ -126,7 +133,7 @@ export function PublicDemoPage() {
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-500">{screens.length} layar</span>
               <Button variant="secondary" size="sm" onClick={() => navigate(-1)}>
-                <IconExternal size={14} /> Kembali
+                Kembali
               </Button>
             </div>
           </div>

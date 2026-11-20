@@ -10,12 +10,13 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_permission
 from app.core.errors import ConflictError, NotFoundError
 from app.db.session import get_db
-from app.models.simulation import Simulation, SimulationDataset
+from app.models.simulation import Simulation, SimulationDataset, SimulationScreen
 from app.models.user import User
 from app.services import audit, simulation as simulation_service
 
@@ -30,12 +31,22 @@ def _ip(request: Request) -> str | None:
 def create_simulation(
     project_id: int,
     request: Request,
-    name: str = "Simulasi Demo",
+    body: dict[str, Any] | None = None,
     actor: User = Depends(require_permission("simulation:write")),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
+    body = body or {}
+    name = body.get("name") or "Simulasi Demo"
+    visual_mode = body.get("visual_mode", True)
+    hotspot_targets = body.get("hotspot_targets") or {}
+
     sim = simulation_service.build_simulation(
-        db, project_id, name=name, actor_id=actor.id
+        db,
+        project_id,
+        name=name,
+        actor_id=actor.id,
+        visual_mode=visual_mode,
+        hotspot_targets=hotspot_targets,
     )
     audit.record(
         db,
@@ -70,6 +81,72 @@ def get_simulation(
     sim = db.get(Simulation, simulation_id)
     if sim is None:
         raise NotFoundError("Simulasi tidak ditemukan")
+    return simulation_service.definition(sim)
+
+
+@router.post("/{simulation_id}/resync-all")
+def resync_all_simulation_screens(
+    simulation_id: int,
+    request: Request,
+    actor: User = Depends(require_permission("simulation:write")),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Sinkronkan ulang seluruh hotspot semua layar simulasi dari draf rekonstruksi aktif."""
+    sim = db.get(Simulation, simulation_id)
+    if sim is None:
+        raise NotFoundError("Simulasi tidak ditemukan")
+
+    resynced_count = 0
+    for screen in sim.screens:
+        if screen.source_screen_id:
+            simulation_service.sync_simulation_hotspots_for_screen(db, screen.source_screen_id)
+            resynced_count += 1
+
+    db.commit()
+    db.refresh(sim)
+
+    audit.record(
+        db,
+        actor_id=actor.id,
+        action="simulation.resync_all",
+        entity_type="simulation",
+        entity_id=simulation_id,
+        meta={"resynced_screens": resynced_count},
+        ip_address=_ip(request),
+    )
+
+    return simulation_service.definition(sim)
+
+
+@router.patch("/{simulation_id}/screens/layout")
+def update_simulation_screens_layout(
+    simulation_id: int,
+    body: dict[str, Any],
+    _: User = Depends(require_permission("simulation:write")),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Perbarui layout layar (mis. target_screen_key hotspot untuk klon visual)."""
+    sim = db.get(Simulation, simulation_id)
+    if sim is None:
+        raise NotFoundError("Simulasi tidak ditemukan")
+
+    screens_in_body = body.get("screens") or []
+    for item in screens_in_body:
+        screen_key = item.get("screen_key")
+        layout = item.get("layout") or {}
+        screen = db.scalar(
+            select(SimulationScreen).where(
+                SimulationScreen.simulation_id == simulation_id,
+                SimulationScreen.screen_key == screen_key,
+            )
+        )
+        if screen is None:
+            continue
+        screen.layout = layout
+        db.add(screen)
+
+    db.commit()
+    db.refresh(sim)
     return simulation_service.definition(sim)
 
 

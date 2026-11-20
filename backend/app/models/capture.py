@@ -108,6 +108,17 @@ class ScreenElement(Base):
     label: Mapped[str | None] = mapped_column(String(200))
     selector_or_hint: Mapped[str | None] = mapped_column(String(500))
     bounding_box: Mapped[dict | None] = mapped_column(JSON)
+    # Enhanced detection fields
+    percent_box: Mapped[dict | None] = mapped_column(JSON)  # {x, y, w, h} in percentage
+    source: Mapped[str] = mapped_column(String(20), default="dom")  # "dom", "hover", "visual"
+    tag: Mapped[str | None] = mapped_column(String(40))
+    href: Mapped[str | None] = mapped_column(String(500))
+    target: Mapped[str | None] = mapped_column(String(20))
+    role: Mapped[str | None] = mapped_column(String(40))
+    input_type: Mapped[str | None] = mapped_column(String(20))
+    parent_element_id: Mapped[str | None] = mapped_column(String(80))  # ID of parent in same screen
+    state: Mapped[str | None] = mapped_column(String(20))  # "default", "hover", "open"
+    confidence: Mapped[float] = mapped_column(default=1.0)
     mask: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, nullable=False)

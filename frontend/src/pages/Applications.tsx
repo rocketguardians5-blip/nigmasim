@@ -129,7 +129,7 @@ export function ApplicationsPage() {
         description="Daftarkan aplikasi sumber yang telah mendapat izin capture."
         actions={
           can('applications:write') ? (
-            <Button onClick={() => setCreateOpen(true)}>+ Tambah Aplikasi</Button>
+            <Button onClick={() => setCreateOpen(true)}>Tambah Aplikasi</Button>
           ) : undefined
         }
       />
@@ -198,7 +198,7 @@ export function ApplicationsPage() {
                       <div className="flex justify-end gap-0.5">
                         <Link
                           to={`/applications/${app.id}`}
-                          className="rounded px-2 py-1 text-xs font-medium text-brand-600 transition-colors hover:bg-brand-50"
+                          className="rounded px-2 py-1 text-xs font-medium text-[#4268ff] transition-colors hover:bg-[#4268ff]/10"
                         >
                           Detail
                         </Link>

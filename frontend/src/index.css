@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --btn-primary: #4268ff;
+  --btn-primary-hover: #3257e6;
+  --btn-primary-active: #2c4fd1;
+  --btn-primary-focus: rgba(66, 104, 255, 0.30);
+  --btn-primary-disabled: rgba(66, 104, 255, 0.50);
+}
+
 @layer base {
   html,
   body,
@@ -16,7 +24,7 @@
 
   /* Fokus yang jelas untuk navigasi keyboard — tanpa glow */
   :focus-visible {
-    @apply outline-none ring-2 ring-brand-600 ring-offset-2 ring-offset-white;
+    @apply outline-none ring-2 ring-[#4268ff]/30 ring-offset-2 ring-offset-white;
   }
 
   /* Angka selalu rata, supaya tabel tidak "bergoyang" */

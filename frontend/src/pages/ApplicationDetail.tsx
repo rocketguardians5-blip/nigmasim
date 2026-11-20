@@ -190,7 +190,7 @@ export function ApplicationDetailPage() {
         actions={
           can('projects:write') ? (
             <Button size="sm" onClick={() => setCreateOpen(true)} disabled={!canCapture}>
-              + Project baru
+              Project baru
             </Button>
           ) : undefined
         }

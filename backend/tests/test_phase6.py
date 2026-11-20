@@ -34,8 +34,9 @@ def test_generate_document_with_steps(
 ) -> None:
     # Siapkan simulasi + tutorial lewat API
     simulation = client.post(
-        f"/api/v1/simulation/project/{project_id}?name=Sim%20Dok",
+        f"/api/v1/simulation/project/{project_id}",
         headers=auth_headers,
+        json={"name": "Sim Dok"},
     )
     if simulation.status_code != 201:
         # tidak ada rekonstruksi -> minimal tetap harus bisa gagal dengan pesan jelas

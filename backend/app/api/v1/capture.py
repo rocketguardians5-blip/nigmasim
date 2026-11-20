@@ -7,13 +7,15 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import FileResponse, Response
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_permission
 from app.core.errors import ConflictError, NotFoundError
 from app.db.session import get_db, now_utc
 from app.models.capture import CaptureSession, Interaction, Screen, ScreenElement
+from app.models.reconstruction import Reconstruction
+from app.models.simulation import SimulationScreen
 from app.models.registry import Application, Project
 from app.models.user import User
 from app.schemas.capture import (
@@ -661,6 +663,28 @@ def delete_screen(
     screen = db.get(Screen, screen_id)
     if screen is None:
         raise NotFoundError("Screen tidak ditemukan")
+
+    # Hapus semua data terkait supaya tidak melanggar foreign key constraint.
+    db.execute(
+        delete(ScreenElement).where(ScreenElement.screen_id == screen_id)
+    )
+    db.execute(
+        delete(Interaction).where(Interaction.screen_id == screen_id)
+    )
+    db.execute(
+        delete(Reconstruction).where(Reconstruction.screen_id == screen_id)
+    )
+    # Lepaskan referensi dari simulasi dan layar induk.
+    db.execute(
+        update(SimulationScreen)
+        .where(SimulationScreen.source_screen_id == screen_id)
+        .values(source_screen_id=None)
+    )
+    db.execute(
+        update(Screen)
+        .where(Screen.parent_id == screen_id)
+        .values(parent_id=None)
+    )
 
     audit.record(
         db,

@@ -12,7 +12,25 @@ mengendalikan browser Chromium untuk menangkap screenshot + metadata.
 | Login manual | Operator melihat dan login sendiri di jendela browser. Worker tidak punya kode untuk mengisi form login. |
 | Batas navigasi | Worker hanya boleh membuka host yang ada di allowlist sesi. |
 
-## Cara menjalankan
+## Cara menjalankan (disarankan: dari root repo, sesi interaktif)
+
+Worker **harus berjalan di sesi interaktif desktop Anda** (SessionId != 0) supaya
+jendela Chromium muncul di layar. Jalankan salah satu skrip di root repo:
+
+```powershell
+cd C:\Users\Lenovo\nigmasim
+.\start-capture-worker.bat                                  # double-click juga bisa
+# atau
+powershell -ExecutionPolicy Bypass -File .\start-capture-worker.ps1
+```
+
+Keduanya menjalankan worker dengan venv `capture-worker\.venv`, `host=0.0.0.0`,
+`port=8010`, `headless=false`, dari folder `src/`. Saat startup, worker mencetak
+`Worker berjalan di sesi interaktif: ya/tidak (SessionId=...)` — kalau **tidak**,
+jendela browser tidak akan terlihat; jalankan ulang lewat skrip di atas, jangan dari
+shell agen. Verifikasi SessionId worker & `chrome.exe` lewat `GET /process`.
+
+## Cara menjalankan manual
 
 ```powershell
 cd C:\Users\Lenovo\nigmasim\capture-worker

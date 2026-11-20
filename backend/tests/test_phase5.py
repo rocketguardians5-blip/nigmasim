@@ -82,8 +82,9 @@ def simulation_id(client: TestClient, auth_headers: dict[str, str]) -> int:
         db.commit()
 
     sim = client.post(
-        f"/api/v1/simulation/project/{project['id']}?name=Sim%20Workflow",
+        f"/api/v1/simulation/project/{project['id']}",
         headers=auth_headers,
+        json={"name": "Sim Workflow"},
     ).json()
     return sim["id"]
 

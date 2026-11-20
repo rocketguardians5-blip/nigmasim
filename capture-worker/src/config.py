@@ -25,8 +25,8 @@ class Settings(BaseSettings):
     # Nama env disamakan dengan backend: CAPTURE_WORKER_TOKEN
     capture_worker_token: str = "dev-only-worker-token"
 
-    # Selalu 127.0.0.1 - worker tidak boleh terekspos ke jaringan.
-    host: str = "127.0.0.1"
+    # 0.0.0.0 agar worker dapat diakses lintas perangkat di jaringan LAN.
+    host: str = "0.0.0.0"
     port: int = 8010
 
     headless: bool = False

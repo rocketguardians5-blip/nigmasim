@@ -14,6 +14,19 @@ export interface SimRow {
 export interface SimLayout {
   subtitle?: string
   title?: string
+  visual_mode?: boolean
+  screenshot_path?: string
+  viewport?: { width: number; height: number } | null
+  hotspots?: Array<{
+    id: number
+    label: string
+    type: string
+    box: { x: number; y: number; w: number; h: number }
+    target_screen_key: string | null
+    element_type?: 'button' | 'dropdown' | 'input_data'
+    config_json?: string
+    action?: string
+  }>
   cards?: { label: string; dataset?: string | null; field?: string | null }[]
   table?: { dataset: string | null; columns: string[]; page_size?: number } | null
   form?: {
@@ -30,6 +43,7 @@ export interface SimScreen {
   route: string
   layout: SimLayout
   actions: unknown[]
+  source_screen_id: number | null
 }
 
 export interface SimulationDefinition {
@@ -49,9 +63,34 @@ export interface SimDatasetInfo {
   row_count: number
 }
 
+export interface HotspotTargetMap {
+  [screenKey: string]: {
+    [hotspotId: number]: string
+  }
+}
+
 export const simulationApi = {
-  build: (projectId: number, name: string) =>
-    api.post<SimulationDefinition>(`/simulation/project/${projectId}?name=${encodeURIComponent(name)}`),
+  build: (
+    projectId: number,
+    body: {
+      name?: string
+      visual_mode?: boolean
+      hotspot_targets?: HotspotTargetMap
+    },
+  ) =>
+    api.post<SimulationDefinition>(`/simulation/project/${projectId}`, body),
+  updateScreenLayout: (
+    simulationId: number,
+    body: {
+      screens: Array<{
+        screen_key: string
+        layout: Record<string, unknown>
+      }>
+    },
+  ) =>
+    api.patch<SimulationDefinition>(`/simulation/${simulationId}/screens/layout`, body),
+  resyncAll: (simulationId: number) =>
+    api.post<SimulationDefinition>(`/simulation/${simulationId}/resync-all`),
   getByProject: (projectId: number) =>
     api.get<SimulationDefinition>(`/simulation/project/${projectId}`),
   get: (simulationId: number) => api.get<SimulationDefinition>(`/simulation/${simulationId}`),

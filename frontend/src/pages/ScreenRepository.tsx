@@ -591,7 +591,7 @@ export function ScreenRepositoryPage() {
                         onClick={() => void chooseCompare(version)}
                         className={`rounded px-2 py-1 text-left text-xs transition-colors ${
                           compareWith?.id === version.id
-                            ? 'bg-brand-50 text-brand-700'
+                            ? 'bg-[#4268ff]/10 text-[#4268ff] font-medium'
                             : 'text-slate-600 hover:bg-slate-100'
                         }`}
                       >
@@ -627,6 +627,13 @@ export function ScreenRepositoryPage() {
 
             {can('screens:write') && (
               <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Judul layar">
+                  <input
+                    className="input"
+                    defaultValue={active.title ?? ''}
+                    onBlur={(e) => void saveMeta({ title: e.target.value.trim() || active.title })}
+                  />
+                </Field>
                 <Field label="Modul / kategori">
                   <select
                     className="input"

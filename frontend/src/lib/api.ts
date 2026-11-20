@@ -302,3 +302,43 @@ export const usersApi = {
 export const healthApi = {
   check: () => api.get<{ status: string }>('/health'),
 }
+
+/* ---------- AI Agent ---------- */
+
+export interface AgentMessage {
+  role: 'user' | 'assistant' | 'system' | 'tool'
+  content: string | null
+  tool_calls?: Array<{
+    id: string
+    type: 'function'
+    function: { name: string; arguments: string }
+  }>
+  tool_call_id?: string
+  name?: string
+}
+
+export interface AgentRequest {
+  messages: AgentMessage[]
+  stream?: boolean
+}
+
+export interface AgentResponse {
+  message: AgentMessage
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+}
+
+export interface AgentTool {
+  type: 'function'
+  function: {
+    name: string
+    description: string
+    parameters: Record<string, unknown>
+  }
+}
+
+export const agentApi = {
+  chat: (request: AgentRequest) =>
+    api.post<AgentResponse>('/agent', request),
+  tools: () =>
+    api.get<{ tools: AgentTool[] }>('/agent/tools'),
+}

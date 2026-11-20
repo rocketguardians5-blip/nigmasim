@@ -19,6 +19,7 @@ import {
   IconSettings,
   IconUsers,
   IconWand,
+  IconMagic,
 } from '../components/icons'
 import type { ReactNode } from 'react'
 
@@ -36,6 +37,7 @@ const NAV: NavItem[] = [
   { to: '/capture', label: 'Capture Studio', icon: IconCamera },
   { to: '/screens', label: 'Screen Repository', icon: IconImages },
   { to: '/reconstruction', label: 'UI Reconstruction', icon: IconWand },
+  { to: '/reconstruction/wizard', label: 'Reconstruction Wizard', icon: IconMagic },
   { to: '/simulation', label: 'Simulation Builder', icon: IconLayers },
   { to: '/workflow', label: 'Workflow Builder', icon: IconFlow },
   { to: '/tutorial', label: 'Tutorial Builder', icon: IconBook },

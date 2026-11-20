@@ -26,7 +26,8 @@
 #>
 param(
     [switch]$Stop,
-    [switch]$WithSample
+    [switch]$WithSample,
+    [switch]$KeepAlive
 )
 
 $ErrorActionPreference = 'Continue'
@@ -86,13 +87,13 @@ Start-Process -FilePath $backendPy `
     -WindowStyle Hidden
 Write-Host '  [1/3] Backend API      -> 127.0.0.1:8000' -ForegroundColor Gray
 
-# 2. Capture Worker (lokal saja)
+# 2. Capture Worker (listen di 0.0.0.0 agar bisa diakses via LAN IP)
+# Catatan: JANGAN gunakan -WindowStyle Hidden agar Chromium headed dapat tampil di layar operator
 Start-Process -FilePath $workerPy `
-    -ArgumentList '-m', 'uvicorn', 'main:app', '--host', '127.0.0.1', '--port', '8010', '--log-level', 'warning' `
+    -ArgumentList '-m', 'uvicorn', 'main:app', '--host', '0.0.0.0', '--port', '8010', '--log-level', 'warning' `
     -WorkingDirectory (Join-Path $root 'capture-worker\src') `
     -RedirectStandardOutput (Join-Path $logs 'worker.out.log') `
-    -RedirectStandardError (Join-Path $logs 'worker.err.log') `
-    -WindowStyle Hidden
+    -RedirectStandardError (Join-Path $logs 'worker.err.log')
 Write-Host '  [2/3] Capture Worker   -> 127.0.0.1:8010' -ForegroundColor Gray
 
 # 3. Web Admin (dibuka ke jaringan)
@@ -165,3 +166,12 @@ Write-Host '  Stop   : .\scripts\dev-lan.ps1 -Stop' -ForegroundColor DarkGray
 Write-Host ''
 
 if (-not $ready) { exit 1 }
+
+if ($KeepAlive) {
+    Write-Host '  Service tetap aktif (KeepAlive mode)...' -ForegroundColor Cyan
+    try {
+        while ($true) { Start-Sleep -Seconds 60 }
+    } finally {
+        Stop-NigmaSim
+    }
+}

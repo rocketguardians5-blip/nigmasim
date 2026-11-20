@@ -14,7 +14,6 @@ import {
   PageHeader,
   Spinner,
 } from '../components/ui'
-import { IconPlus } from '../components/icons'
 
 export function TutorialBuilderPage() {
   const { can } = useAuth()
@@ -223,7 +222,7 @@ export function TutorialBuilderPage() {
                         <button
                           type="button"
                           onClick={() => void togglePublish(item)}
-                          className="rounded px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50"
+                          className="rounded px-2 py-1 text-xs font-medium text-[#4268ff] hover:bg-[#4268ff]/10"
                         >
                           {item.status === 'published' ? 'Tarik dari published' : 'Publish'}
                         </button>
@@ -321,7 +320,7 @@ export function TutorialBuilderPage() {
                       ])
                     }
                   >
-                    <IconPlus size={14} /> Tambah langkah
+                    Tambah langkah
                   </Button>
                   <Button onClick={() => void createTutorial()}>Simpan tutorial</Button>
                 </div>

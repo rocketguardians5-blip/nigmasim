@@ -26,6 +26,28 @@ function base(className?: string, size = 16): Record<string, unknown> {
 
 /* ---------- Navigasi (sidebar) ---------- */
 
+export const IconMenu = ({ className, size }: IconProps) => (
+  <svg {...base(className, size)}>
+    <line x1="4" y1="6" x2="20" y2="6" />
+    <line x1="4" y1="12" x2="20" y2="12" />
+    <line x1="4" y1="18" x2="20" y2="18" />
+  </svg>
+)
+
+export const IconChevronLeft = ({ className, size }: IconProps) => (
+  <svg {...base(className, size)}>
+    <polyline points="15 18 9 12 15 6" />
+  </svg>
+)
+
+export const IconLogout = ({ className, size }: IconProps) => (
+  <svg {...base(className, size)}>
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+    <polyline points="16 17 21 12 16 7" />
+    <line x1="21" y1="12" x2="9" y2="12" />
+  </svg>
+)
+
 export const IconDashboard = ({ className, size }: IconProps) => (
   <svg {...base(className, size)}>
     <rect x="3" y="3" width="7" height="7" rx="1" />
@@ -129,12 +151,6 @@ export const IconSettings = ({ className, size }: IconProps) => (
 
 /* ---------- Aksi ---------- */
 
-export const IconPlus = ({ className, size }: IconProps) => (
-  <svg {...base(className, size)}>
-    <path d="M12 5v14M5 12h14" />
-  </svg>
-)
-
 export const IconSearch = ({ className, size }: IconProps) => (
   <svg {...base(className, size)}>
     <circle cx="11" cy="11" r="6.5" />
@@ -145,12 +161,6 @@ export const IconSearch = ({ className, size }: IconProps) => (
 export const IconCheck = ({ className, size }: IconProps) => (
   <svg {...base(className, size)}>
     <path d="m5 12.5 4.5 4.5L19 7" />
-  </svg>
-)
-
-export const IconX = ({ className, size }: IconProps) => (
-  <svg {...base(className, size)}>
-    <path d="M6 6l12 12M18 6 6 18" />
   </svg>
 )
 
@@ -175,41 +185,10 @@ export const IconLock = ({ className, size }: IconProps) => (
   </svg>
 )
 
-export const IconLogout = ({ className, size }: IconProps) => (
-  <svg {...base(className, size)}>
-    <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" />
-    <path d="M10 8 6 12l4 4M6 12h9" />
-  </svg>
-)
-
-export const IconMenu = ({ className, size }: IconProps) => (
-  <svg {...base(className, size)}>
-    <path d="M4 7h16M4 12h16M4 17h16" />
-  </svg>
-)
-
 export const IconPanel = ({ className, size }: IconProps) => (
   <svg {...base(className, size)}>
     <rect x="3" y="4" width="18" height="16" rx="2" />
     <path d="M9.5 4v16" />
-  </svg>
-)
-
-export const IconChevronLeft = ({ className, size }: IconProps) => (
-  <svg {...base(className, size)}>
-    <path d="m14.5 6-6 6 6 6" />
-  </svg>
-)
-
-export const IconChevronRight = ({ className, size }: IconProps) => (
-  <svg {...base(className, size)}>
-    <path d="m9.5 6 6 6-6 6" />
-  </svg>
-)
-
-export const IconArrowLeft = ({ className, size }: IconProps) => (
-  <svg {...base(className, size)}>
-    <path d="M19 12H5M11 6l-6 6 6 6" />
   </svg>
 )
 
@@ -218,5 +197,83 @@ export const IconExternal = ({ className, size }: IconProps) => (
     <path d="M14 4h6v6" />
     <path d="M20 4 11 13" />
     <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+  </svg>
+)
+
+/* ---------- Reconstruction Wizard Icons ---------- */
+
+export const IconBox = ({ className, size }: IconProps) => (
+  <svg {...base(className, size)}>
+    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+    <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+    <line x1="12" y1="22.08" x2="12" y2="12" />
+  </svg>
+)
+
+export const IconDownload = ({ className, size }: IconProps) => (
+  <svg {...base(className, size)}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="7 10 12 15 17 10" />
+    <line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+)
+
+export const IconCode = ({ className, size }: IconProps) => (
+  <svg {...base(className, size)}>
+    <polyline points="16 18 22 12 16 6" />
+    <polyline points="8 6 2 12 8 18" />
+  </svg>
+)
+
+export const IconDatabase = ({ className, size }: IconProps) => (
+  <svg {...base(className, size)}>
+    <ellipse cx="12" cy="5" rx="9" ry="3" />
+    <path d="M3 5v14a9 3 0 0 0 18 0V5" />
+    <path d="M3 12a9 3 0 0 0 18 0" />
+  </svg>
+)
+
+export const IconPlay = ({ className, size }: IconProps) => (
+  <svg {...base(className, size)}>
+    <polygon points="5 3 19 12 5 21 5 3" />
+  </svg>
+)
+
+export const IconCopy = ({ className, size }: IconProps) => (
+  <svg {...base(className, size)}>
+    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+  </svg>
+)
+
+export const IconChevronRight = ({ className, size }: IconProps) => (
+  <svg {...base(className, size)}>
+    <polyline points="9 18 15 12 9 6" />
+  </svg>
+)
+
+/* ---------- Reconstruction Wizard Icons (Additional) ---------- */
+
+export const IconMagic = ({ className, size }: IconProps) => (
+  <svg {...base(className, size)}>
+    <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+  </svg>
+)
+
+export const IconTable = ({ className, size }: IconProps) => (
+  <svg {...base(className, size)}>
+    <path d="M3 3h18v18H3V3z" />
+    <path d="M3 9h18" />
+    <path d="M3 15h18" />
+    <path d="M9 3v18" />
+    <path d="M15 3v18" />
+  </svg>
+)
+
+export const IconFormInput = ({ className, size }: IconProps) => (
+  <svg {...base(className, size)}>
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <path d="M3 11h18" />
+    <path d="M9 5v14" />
   </svg>
 )

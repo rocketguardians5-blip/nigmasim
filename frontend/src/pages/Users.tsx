@@ -86,7 +86,7 @@ export function UsersPage() {
         description="Akun yang dapat mengakses platform NigmaSim beserta peran dan izinnya."
         actions={
           can('users:write') ? (
-            <Button onClick={() => setCreateOpen(true)}>+ Tambah Pengguna</Button>
+            <Button onClick={() => setCreateOpen(true)}>Tambah Pengguna</Button>
           ) : undefined
         }
       />

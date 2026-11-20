@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 import masking
 from browser import CaptureError, manager
 from config import settings
+from win_session import process_info
 
 
 class StartRequest(BaseModel):
@@ -38,14 +39,77 @@ class CaptureRequest(BaseModel):
     include_image: bool = False
 
 
-app = FastAPI(title="NigmaSim Capture Worker (internal)", docs_url=None, redoc_url=None)
+class CaptureStateRequest(BaseModel):
+    state_name: str
+    label: str | None = None
+    full_page: bool = False
+    relative_dir: str = "captures"
+
+
+class SavePageRequest(BaseModel):
+    export_name: str | None = None
+
+
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    # Bukti sesi: kalau worker tidak berjalan di sesi interaktif (SessionId 0 /
+    # tanpa desktop), jendela Chromium TIDAK akan tampil di layar operator.
+    info = process_info()
+    sid = info.get("windows_session_id")
+    if info.get("interactive"):
+        print(
+            f"[startup] Worker berjalan di sesi interaktif: ya (SessionId={sid}, PID={info.get('pid')})",
+            flush=True,
+        )
+    else:
+        print(
+            f"[startup] Worker berjalan di sesi interaktif: tidak (SessionId={sid}, PID={info.get('pid')})",
+            flush=True,
+        )
+        print(
+            "[startup] PERINGATAN: worker berjalan TANPA sesi interaktif (SessionId 0 / tanpa desktop). "
+            "Jendela Chromium TIDAK akan tampil di layar. Jalankan ulang lewat start-capture-worker.bat "
+            "dari desktop interaktif - jangan dari shell agen / proses latar belakang.",
+            flush=True,
+        )
+    # Rekonsiliasi sesi active/running menggantung di DB saat startup
+    try:
+        import sqlite3
+        for candidate in (
+            Path("backend/nigmasim.db"),
+            Path("../backend/nigmasim.db"),
+            Path("../../backend/nigmasim.db"),
+            Path(r"c:\Users\Lenovo\nigmasim\backend\nigmasim.db"),
+        ):
+            if candidate.exists():
+                with sqlite3.connect(str(candidate.resolve())) as con:
+                    con.execute(
+                        "UPDATE capture_sessions SET status = 'stopped', ended_at = CURRENT_TIMESTAMP WHERE status IN ('active', 'running') AND ended_at IS NULL"
+                    )
+                    con.commit()
+                break
+    except Exception:
+        pass
+    yield
+
+
+app = FastAPI(title="NigmaSim Capture Worker (internal)", docs_url=None, redoc_url=None, lifespan=lifespan)
 
 # Panel admin (bisa dibuka dari perangkat lain di LAN) memanggil worker ini
 # langsung dari browser. Demi itu worker harus mengizinkan CORS.
+CORS_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://192.168.2.119:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=CORS_ORIGINS,
+    allow_origin_regex=r"^https?://.*:5173$",
+    allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
@@ -67,7 +131,24 @@ def _check_token(x_worker_token: str | None, origin: str | None = None) -> None:
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    return {"status": "ok", "role": "capture-worker", "headless": settings.headless}
+    data: dict[str, Any] = {"status": "ok", "role": "capture-worker", "headless": settings.headless}
+    # Field datar: pid, windows_session_id, interactive, browser_children
+    data.update(process_info())
+    return data
+
+
+@app.get("/process")
+def process(
+    x_worker_token: str | None = Header(default=None),
+    origin: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """SessionId Windows worker + proses browser (chrome.exe) yang dibuatnya.
+
+    Dipakai membuktikan worker dan Chromium berjalan di sesi yang sama dengan
+    desktop operator.
+    """
+    _check_token(x_worker_token, origin)
+    return process_info()
 
 
 @app.post("/session/start")
@@ -116,7 +197,9 @@ def stop(x_worker_token: str | None = Header(default=None), origin: str | None =
 @app.get("/session/state")
 def state(x_worker_token: str | None = Header(default=None), origin: str | None = Header(default=None)) -> dict[str, Any]:
     _check_token(x_worker_token, origin)
-    return manager.state()
+    data = manager.state()
+    data["process"] = process_info()
+    return data
 
 
 @app.post("/session/capture")
@@ -205,6 +288,110 @@ def render_pdf(
         raise HTTPException(status_code=500, detail=f"Gagal render PDF: {exc}") from exc
 
     return {"pdf_base64": base64.b64encode(pdf).decode("ascii")}
+
+
+# ===== RECONSTRUCTION ENDPOINTS =====
+
+@app.post("/session/capture-state")
+def capture_state(
+    payload: CaptureStateRequest,
+    x_worker_token: str | None = Header(default=None),
+    origin: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Capture halaman dengan nama state (multi-state: dropdown_closed, dropdown_open, modal_open, dll)."""
+    _check_token(x_worker_token, origin)
+    try:
+        return manager.capture_state(
+            payload.state_name,
+            label=payload.label,
+            full_page=payload.full_page,
+            relative_dir=payload.relative_dir,
+        )
+    except CaptureError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Gagal capture state: {exc}") from exc
+
+
+@app.get("/session/har")
+def get_har(
+    x_worker_token: str | None = Header(default=None),
+    origin: str | None = Header(default=None),
+) -> list[dict[str, Any]]:
+    """Ambil HAR (network log) dari sesi saat ini."""
+    _check_token(x_worker_token, origin)
+    try:
+        return manager.get_har()
+    except CaptureError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/session/storage")
+def get_storage(
+    x_worker_token: str | None = Header(default=None),
+    origin: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Ambil snapshot localStorage & sessionStorage."""
+    _check_token(x_worker_token, origin)
+    try:
+        return manager.get_storage()
+    except CaptureError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/session/component-states")
+def get_component_states(
+    x_worker_token: str | None = Header(default=None),
+    origin: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Deteksi state komponen interaktif (dropdown, modal, tabs, accordion)."""
+    _check_token(x_worker_token, origin)
+    try:
+        return manager.get_component_states()
+    except CaptureError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.get("/session/form-schemas")
+def get_form_schemas(
+    x_worker_token: str | None = Header(default=None),
+    origin: str | None = Header(default=None),
+) -> list[dict[str, Any]]:
+    """Ekstrak schema form (field, type, validation, options)."""
+    _check_token(x_worker_token, origin)
+    try:
+        return manager.get_form_schemas()
+    except CaptureError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.post("/session/save-page")
+def save_page(
+    payload: SavePageRequest,
+    x_worker_token: str | None = Header(default=None),
+    origin: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Simpan halaman sebagai single-file HTML (assets di-inline base64)."""
+    _check_token(x_worker_token, origin)
+    try:
+        return manager.save_page_as_html(payload.export_name)
+    except CaptureError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Gagal save page: {exc}") from exc
+
+
+@app.get("/session/data")
+def get_session_data(
+    x_worker_token: str | None = Header(default=None),
+    origin: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Ambil SEMUA data sesi untuk reconstruction: captures, HAR, storage, component states, form schemas, HTML exports."""
+    _check_token(x_worker_token, origin)
+    try:
+        return manager.get_session_data()
+    except CaptureError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 if __name__ == "__main__":  # pragma: no cover

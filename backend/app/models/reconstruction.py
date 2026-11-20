@@ -54,7 +54,9 @@ class ReconstructionComponent(Base):
     label: Mapped[str | None] = mapped_column(String(200))
     props: Mapped[dict | None] = mapped_column(JSON)
     order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    source: Mapped[str] = mapped_column(String(20), default="detected", nullable=False)
+    source: Mapped[str] = mapped_column(String(20), default="ai-vision", nullable=False)
+    element_type: Mapped[str] = mapped_column(String(30), default="button", nullable=False)
+    config_json: Mapped[str | None] = mapped_column(Text)
     notes: Mapped[str | None] = mapped_column(Text)
 
     reconstruction: Mapped[Reconstruction] = relationship(back_populates="components")

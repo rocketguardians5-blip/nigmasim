@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
-    cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173", "*"]
 
     # ---------- Bootstrap admin ----------
     admin_email: str = "admin@nigmasim.com"
@@ -57,6 +57,23 @@ class Settings(BaseSettings):
     capture_default_viewport_height: int = 900
     capture_allowed_hosts: str = ""
 
+    # ---------- NVIDIA NIM (AI Agent chat) ----------
+    nvidia_api_key: str = ""
+    nvidia_model: str = "nvidia/nemotron-3-ultra"
+    nvidia_base_url: str = "https://integrate.api.nvidia.com/v1"
+
+    # ---------- Google Gemini (AI Vision) ----------
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-3.8-flash"
+    gemini_fallback_models: str = "gemini-3.5-flash,gemini-3.1-flash-lite"
+    gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
+
+    # ---------- Agent settings ----------
+    agent_max_rounds: int = 5
+    agent_rate_limit_per_minute: int = 10
+    agent_max_history_messages: int = 20
+    agent_max_input_chars: int = 4000
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, v: object) -> object:
@@ -80,6 +97,17 @@ class Settings(BaseSettings):
     @property
     def allowed_capture_hosts(self) -> list[str]:
         return [h.strip().lower() for h in self.capture_allowed_hosts.split(",") if h.strip()]
+
+    @property
+    def gemini_model_chain(self) -> list[str]:
+        """Model utama + cadangan, dipakai berurutan saat model sibuk/tidak tersedia."""
+        chain: list[str] = []
+        for raw in (self.gemini_model, self.gemini_fallback_models):
+            for item in raw.split(","):
+                name = item.strip()
+                if name and name not in chain:
+                    chain.append(name)
+        return chain
 
     @property
     def is_secret_configured(self) -> bool:

@@ -6,7 +6,6 @@ import { screensApi } from '../lib/capture'
 import type { Screen } from '../lib/capture'
 import { useAuth } from '../lib/auth'
 import { Alert, Badge, Card, EmptyState, PageHeader, Spinner, cn } from '../components/ui'
-import { IconChevronLeft, IconChevronRight } from '../components/icons'
 
 interface Product {
   app: Application
@@ -127,13 +126,13 @@ export function DashboardPage() {
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <Link
                 to="/capture"
-                className="inline-flex h-11 items-center rounded-full bg-brand-600 px-6 text-sm font-medium text-white transition-colors hover:bg-brand-700"
+                className="inline-flex h-11 items-center rounded-full bg-[#4268ff] px-6 text-sm font-medium text-white transition-colors hover:bg-[#3257e6] active:bg-[#2c4fd1]"
               >
                 Mulai capture
               </Link>
               <Link
                 to="/screens"
-                className="inline-flex h-11 items-center rounded-full border border-brand-600 px-6 text-sm font-medium text-brand-700 transition-colors hover:bg-brand-50"
+                className="inline-flex h-11 items-center rounded-full border border-[#4268ff] px-6 text-sm font-medium text-[#4268ff] transition-colors hover:bg-[#4268ff] hover:text-white active:bg-[#2c4fd1]"
               >
                 Lihat Screen Repository
               </Link>
@@ -173,20 +172,22 @@ export function DashboardPage() {
                   <button
                     type="button"
                     aria-label="Produk sebelumnya"
+                    title="Produk sebelumnya"
                     onClick={() =>
                       setHeroIndex((index) => (index - 1 + heroProducts.length) % heroProducts.length)
                     }
-                    className="absolute left-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-pop backdrop-blur transition-all duration-200 hover:bg-white hover:text-brand-700 active:scale-95"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-pop backdrop-blur transition-all duration-200 hover:bg-white hover:text-[#4268ff] active:scale-95"
                   >
-                    <IconChevronLeft size={18} />
+                    Sebelumnya
                   </button>
                   <button
                     type="button"
                     aria-label="Produk berikutnya"
+                    title="Produk berikutnya"
                     onClick={() => setHeroIndex((index) => (index + 1) % heroProducts.length)}
-                    className="absolute right-3 top-1/2 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-slate-200 bg-white/90 text-slate-700 shadow-pop backdrop-blur transition-all duration-200 hover:bg-white hover:text-brand-700 active:scale-95"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-700 shadow-pop backdrop-blur transition-all duration-200 hover:bg-white hover:text-[#4268ff] active:scale-95"
                   >
-                    <IconChevronRight size={18} />
+                    Berikutnya
                   </button>
                 </>
               )}

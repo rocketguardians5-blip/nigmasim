@@ -106,7 +106,8 @@ def test_analyze_creates_draft(
     draft = response.json()
 
     assert draft["status"] == "draft"
-    assert draft["generated_by"] == "rule-engine"
+    # generated_by can be "rule-engine" (no AI) or "hybrid" (AI configured and working)
+    assert draft["generated_by"] in ("rule-engine", "hybrid", "ai-vision")
     assert draft["layout"]["has_sidebar"] is True
     assert draft["layout"]["regions"]["sidebar"]["item_count"] == 4
 
@@ -254,3 +255,122 @@ def test_screen_without_data_is_rejected(
         f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers
     )
     assert response.status_code == 409
+
+
+def test_reanalysis_preserves_manual_hotspots(
+    client: TestClient, auth_headers: dict[str, str], project_id: int
+) -> None:
+    """Hotspot manual tidak boleh hilang saat analisis ulang (layer terpisah)."""
+    screen_id = _make_screen(project_id)
+    client.post(f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers)
+
+    manual = client.post(
+        "/api/v1/reconstructions/component",
+        headers=auth_headers,
+        params={"screen_id": screen_id},
+        json={
+            "region": "manual",
+            "component_type": "button",
+            "label": "Hotspot Manual Uji",
+            "props": {"box": {"x": 10, "y": 20, "w": 5, "h": 4}},
+            "notes": "Digambar operator",
+        },
+    )
+    assert manual.status_code == 201, manual.text
+    assert manual.json()["source"] == "manual"
+
+    again = client.post(
+        f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers
+    )
+    assert again.status_code == 201
+    manuals = [c for c in again.json()["components"] if c["region"] == "manual"]
+    assert len(manuals) == 1
+    assert manuals[0]["label"] == "Hotspot Manual Uji"
+    assert manuals[0]["notes"] == "Digambar operator"
+    # Komponen otomatis tetap ada terpisah dari manual
+    assert any(c["region"] != "manual" for c in again.json()["components"])
+
+
+def test_merge_components_dedupes_percent_against_pixel() -> None:
+    """Box AI (persen) harus dibandingkan dalam piksel agar duplikat terdeteksi."""
+    from app.services.reconstructor import _merge_components
+
+    existing = [
+        {
+            "region": "main",
+            "component_type": "button",
+            "label": "Tombol dari AI (lama)",
+            "props": {
+                "box": {
+                    "x": 100 / 1440 * 100,
+                    "y": 100 / 900 * 100,
+                    "w": 200 / 1440 * 100,
+                    "h": 50 / 900 * 100,
+                }
+            },
+            "source": "ai-vision",
+        }
+    ]
+    # Kotak yang sama persis, tapi dikirim AI dalam persen (viewport 1440x900)
+    ai_same = {
+        "region": "main",
+        "component_type": "button",
+        "label": "Tombol dari AI",
+        "props": {
+            "box": {
+                "x": 100 / 1440 * 100,
+                "y": 100 / 900 * 100,
+                "w": 200 / 1440 * 100,
+                "h": 50 / 900 * 100,
+            }
+        },
+    }
+    ai_new = {
+        "region": "main",
+        "component_type": "card",
+        "label": "Kartu baru",
+        "props": {"box": {"x": 50, "y": 50, "w": 10, "h": 10}},
+    }
+
+    merged = _merge_components(
+        existing, [ai_same, ai_new], {"width": 1440, "height": 900}
+    )
+
+    assert len(merged) == 2
+    assert merged[0]["source"] == "ai-vision"
+    assert merged[1]["label"] == "Kartu baru"
+    assert merged[1]["source"] == "ai-vision"
+
+
+def test_build_sections_ignores_bridging_large_box() -> None:
+    """Kartu besar tidak boleh menggabungkan seluruh layar jadi satu section."""
+    from app.services.reconstructor import _build_sections
+
+    items = [
+        {"type": "heading", "label": "Hero", "box": {"x": 0, "y": 40, "w": 400, "h": 40}},
+        {"type": "card", "label": "Kartu besar", "box": {"x": 0, "y": 100, "w": 1440, "h": 500}},
+        {"type": "button", "label": "Aksi", "box": {"x": 0, "y": 620, "w": 120, "h": 40}},
+    ]
+
+    sections = _build_sections(items, {"width": 1440, "height": 900})
+
+    assert len(sections) >= 2
+    assert sum(section["item_count"] for section in sections) == 3
+
+
+def test_ai_analyze_requires_gemini_key(
+    client: TestClient, auth_headers: dict[str, str], project_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    screen_id = _make_screen(project_id)
+    client.post(f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers)
+
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "gemini_api_key", "")
+    response = client.post(
+        f"/api/v1/reconstructions/screen/{screen_id}/ai-analyze",
+        headers=auth_headers,
+        json={"force_refresh": True},
+    )
+    assert response.status_code == 503
+    assert "GEMINI_API_KEY" in response.text

@@ -136,6 +136,17 @@ class ElementOut(BaseModel):
     label: str | None = None
     selector_or_hint: str | None = None
     bounding_box: dict[str, Any] | None = None
+    # Enhanced detection fields
+    percent_box: dict[str, float] | None = None
+    source: str = "dom"
+    tag: str | None = None
+    href: str | None = None
+    target: str | None = None
+    role: str | None = None
+    input_type: str | None = None
+    parent_element_id: str | None = None
+    state: str | None = None
+    confidence: float = 1.0
     mask: bool
     notes: str | None = None
 
@@ -167,3 +178,32 @@ class InteractionOut(BaseModel):
 
 
 NavigationNode.model_rebuild()
+
+
+class DetectedElementData(BaseModel):
+    """Enhanced element data from the new detector."""
+    type: str
+    label: str | None = None
+    hint: str | None = None
+    box: dict[str, int] | None = None
+    percent_box: dict[str, float] | None = None
+    source: str = "dom"  # "dom", "hover", "visual"
+    tag: str | None = None
+    href: str | None = None
+    target: str | None = None
+    role: str | None = None
+    input_type: str | None = None
+    parent_id: str | None = None
+    state: str | None = None  # "default", "hover", "open"
+    confidence: float = 1.0
+
+
+class DetectionReport(BaseModel):
+    """Summary report of element detection."""
+    total_elements: int
+    by_type: dict[str, int]
+    by_source: dict[str, int]
+    low_confidence_count: int
+    low_confidence_elements: list[dict[str, Any]] = []
+    hover_revealed_count: int
+    hover_triggers_count: int

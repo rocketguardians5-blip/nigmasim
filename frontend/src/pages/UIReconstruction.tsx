@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { applicationsApi, projectsApi, ApiError } from '../lib/api'
 import type { Application, Project } from '../lib/api'
 import { screensApi } from '../lib/capture'
@@ -15,26 +15,60 @@ import {
   Field,
   PageHeader,
   Spinner,
-  cn,
 } from '../components/ui'
-import { IconCheck, IconExternal } from '../components/icons'
-
-const COMPONENT_COLOR: Record<string, string> = {
-  'nav-item': 'border-brand-500 bg-brand-500/10 text-brand-800',
-  'header-item': 'border-slate-500 bg-slate-500/10 text-slate-700',
-  button: 'border-amber-500 bg-amber-500/10 text-amber-800',
-  field: 'border-cyan-600 bg-cyan-500/10 text-cyan-900',
-  table: 'border-emerald-600 bg-emerald-500/10 text-emerald-900',
-  heading: 'border-violet-500 bg-violet-500/10 text-violet-900',
-  form: 'border-teal-600 bg-teal-500/10 text-teal-900',
-  card: 'border-rose-500 bg-rose-500/10 text-rose-900',
-  image: 'border-slate-400 bg-slate-400/10 text-slate-700',
-}
+import { IconWarning, IconInfo, IconMagic } from '../components/icons'
+import { HotspotEditor, type HotspotBox } from '../components/HotspotEditor'
 
 const CONFIDENCE_TONE: Record<string, 'neutral' | 'success' | 'warning' | 'danger'> = {
   high: 'success',
   medium: 'warning',
   low: 'danger',
+}
+
+function convertComponentsToHotspots(draft: Reconstruction): HotspotBox[] {
+  const boxes: HotspotBox[] = []
+  
+  for (const component of draft.components ?? []) {
+    const props = component.props || {}
+    const box = props.box
+    
+    if (!box || typeof box.x !== 'number' || typeof box.y !== 'number') {
+      continue // Skip components without valid coordinates
+    }
+    
+    // Determine element type from component
+    let elementType: 'button' | 'dropdown' | 'input_data' = 'button'
+    if (component.element_type === 'dropdown' || component.component_type === 'dropdown') {
+      elementType = 'dropdown'
+    } else if (component.element_type === 'input_data' || component.component_type === 'field' || component.component_type === 'input') {
+      elementType = 'input_data'
+    }
+    
+    boxes.push({
+      id: `comp-${component.id}`,
+      x: box.x,
+      y: box.y,
+      w: box.w,
+      h: box.h,
+      label: component.label || component.component_type,
+      action: typeof props.action === 'string' ? props.action : '',
+      component_type: component.component_type,
+      layer: component.source === 'manual' || component.region === 'manual' ? 'manual' : 'auto',
+      source: component.source,
+      element_type: elementType,
+      config_json: component.config_json || undefined,
+    })
+  }
+  
+  return boxes
+}
+
+function getComponentsWithoutPosition(draft: Reconstruction): ReconstructionComponent[] {
+  return (draft.components ?? []).filter(component => {
+    const props = component.props || {}
+    const box = props.box
+    return !box || typeof box.x !== 'number' || typeof box.y !== 'number'
+  })
 }
 
 export function UIReconstructionPage() {
@@ -48,10 +82,86 @@ export function UIReconstructionPage() {
   const [draft, setDraft] = useState<Reconstruction | null>(null)
   const [screenshot, setScreenshot] = useState<string | null>(null)
   const [code, setCode] = useState('')
-  const [loading] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  
+  // Hotspot editor state
+  const [hotspots, setHotspots] = useState<HotspotBox[]>([])
+  const [isEditorOpen, setIsEditorOpen] = useState(false)
+
+  const loadDraft = useCallback(async (id: number) => {
+    try {
+      const result = await reconstructionApi.get(id)
+      setDraft(result)
+      setCode(result.code_text ?? '')
+      
+      // Convert reconstruction components to hotspot boxes
+      const boxes = convertComponentsToHotspots(result)
+      setHotspots(boxes)
+    } catch {
+      setDraft(null)
+      setCode('')
+      setHotspots([])
+    }
+  }, [])
+
+  const saveHotspotsToBackend = useCallback(async (boxes: HotspotBox[]) => {
+    if (!screenId || !draft) return
+    
+    try {
+      // Update existing components with new positions
+      for (const box of boxes) {
+        if (box.id.startsWith('comp-')) {
+          const componentId = parseInt(box.id.replace('comp-', ''), 10)
+          if (!isNaN(componentId)) {
+            const existingComponent = draft.components.find(c => c.id === componentId)
+            if (existingComponent) {
+              // Only update if position changed
+              const props = existingComponent.props || {}
+              const oldBox = props.box
+              if (oldBox && (oldBox.x !== box.x || oldBox.y !== box.y || oldBox.w !== box.w || oldBox.h !== box.h)) {
+                await reconstructionApi.updateComponent(componentId, {
+                  label: existingComponent.label,
+                  notes: existingComponent.notes,
+                  region: existingComponent.region,
+                  component_type: existingComponent.component_type,
+                  element_type: existingComponent.element_type,
+                  config_json: existingComponent.config_json,
+                })
+              }
+            }
+          }
+        } else if (box.layer === 'manual') {
+          // Create new manual component
+          await reconstructionApi.createComponent(screenId, {
+            region: box.component_type === 'nav-item' ? 'sidebar' : box.component_type === 'header-item' ? 'header' : 'main',
+            component_type: box.component_type,
+            label: box.label,
+            props: {
+              box: { x: box.x, y: box.y, w: box.w, h: box.h },
+              action: box.action,
+            },
+            element_type: box.element_type || 'button',
+            config_json: box.config_json,
+          })
+        }
+      }
+      
+      // Refresh draft to get updated components
+      await loadDraft(screenId)
+    } catch (err) {
+      console.error('Failed to save hotspots:', err)
+    }
+  }, [screenId, draft, loadDraft])
+
+  const handleHotspotsChange = useCallback((boxes: HotspotBox[]) => {
+    setHotspots(boxes)
+    // Debounced save to backend
+    setTimeout(() => {
+      void saveHotspotsToBackend(boxes)
+    }, 500)
+  }, [saveHotspotsToBackend])
 
   useEffect(() => {
     void (async () => {
@@ -98,24 +208,20 @@ export function UIReconstructionPage() {
     void loadScreens()
   }, [loadScreens])
 
-  const loadDraft = useCallback(async (id: number) => {
-    try {
-      const result = await reconstructionApi.get(id)
-      setDraft(result)
-      setCode(result.code_text ?? '')
-    } catch {
+  useEffect(() => {
+    if (screenId) {
+      void loadDraft(screenId)
+    } else {
       setDraft(null)
       setCode('')
-    }
-  }, [])
-
-  // Muat draf + screenshot asli saat layar dipilih
-  useEffect(() => {
-    if (!screenId) {
-      setDraft(null)
       setScreenshot(null)
-      return
+      setHotspots([])
     }
+  }, [screenId, loadDraft])
+
+  // Load screenshot when screen changes
+  useEffect(() => {
+    if (!screenId) return
     void (async () => {
       try {
         const url = await screensApi.screenshotUrl(screenId, true)
@@ -123,108 +229,81 @@ export function UIReconstructionPage() {
       } catch {
         setScreenshot(null)
       }
-      await loadDraft(screenId)
     })()
-  }, [screenId, loadDraft])
+  }, [screenId])
 
-  async function handleAnalyze() {
+  const handleAnalyze = useCallback(async () => {
     if (!screenId) return
     setAnalyzing(true)
     setError(null)
     try {
-      const result = await reconstructionApi.analyze(screenId)
-      setDraft(result)
-      setCode(result.code_text ?? '')
-      setNotice(
-        `Draf dibuat: ${result.components.length} komponen, ${result.assumptions.length} asumsi perlu dicek.`,
-      )
+      await reconstructionApi.analyze(screenId)
+      await loadDraft(screenId)
+      setNotice('Analisis selesai — draf dibuat')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Analisis gagal')
     } finally {
       setAnalyzing(false)
     }
-  }
+  }, [screenId, loadDraft])
 
-  async function handleSaveCode() {
+  const handleAIAnalyze = useCallback(async () => {
     if (!screenId) return
+    setAnalyzing(true)
+    setError(null)
     try {
-      const result = await reconstructionApi.updateCode(screenId, code)
-      setDraft(result)
-      setNotice('Kode draf disimpan. Status kembali ke draft dan wajib direview ulang.')
+      await reconstructionApi.aiAnalyze(screenId, true)
+      await loadDraft(screenId)
+      setNotice('AI vision selesai — draf diperbarui')
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Gagal menyimpan kode')
+      setError(err instanceof ApiError ? err.message : 'AI vision gagal')
+    } finally {
+      setAnalyzing(false)
     }
+  }, [screenId, loadDraft])
+
+  const handleReview = useCallback(async (status: 'in_review' | 'approved' | 'rejected') => {
+    if (!screenId || !draft) return
+    try {
+      await reconstructionApi.review(screenId, status)
+      const updated = await reconstructionApi.get(screenId)
+      setDraft(updated)
+      setNotice(`Draf di${status === 'approved' ? 'setujui' : status === 'rejected' ? 'tolak' : 'minta review'}`)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Review gagal')
+    }
+  }, [screenId, draft])
+
+  if (!appId) {
+    return (
+      <EmptyState title="Belum ada aplikasi" description="Buat aplikasi di halaman Application Registry." />
+    )
   }
 
-  async function handleResolve(id: number, resolved: boolean) {
-    try {
-      if (resolved) await reconstructionApi.resolve(id)
-      else await reconstructionApi.unresolve(id)
-      if (screenId) await loadDraft(screenId)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Gagal mengubah asumsi')
-    }
-  }
-
-  async function handleReview(status: 'approved' | 'rejected' | 'in_review') {
-    if (!screenId) return
-    try {
-      const result = await reconstructionApi.review(screenId, status)
-      setDraft(result)
-      setNotice(
-        status === 'approved'
-          ? 'Draf disetujui dan siap dipakai sebagai bahan Phase 4.'
-          : 'Draf ditolak / dikembalikan ke review.',
-      )
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Gagal menyimpan status review')
-    }
-  }
-
-  async function handleComponentEdit(component: ReconstructionComponent, label: string) {
-    try {
-      await reconstructionApi.updateComponent(component.id, { label })
-      if (screenId) await loadDraft(screenId)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Gagal menyimpan komponen')
-    }
-  }
-
-  const grouped = useMemo(() => {
-    const map = new Map<string, ReconstructionComponent[]>()
-    for (const component of draft?.components ?? []) {
-      if (!map.has(component.region)) map.set(component.region, [])
-      map.get(component.region)!.push(component)
-    }
-    return [...map.entries()]
-  }, [draft])
-
-  const unresolved = (draft?.assumptions ?? []).filter((a) => !a.resolved).length
-  const canReview = can('screens:review')
+  const unresolved = draft?.assumptions?.filter((a) => !a.resolved).length ?? 0
+  const canReview = can('reconstruction.review')
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="UI Reconstruction"
-        description="Ubah hasil capture menjadi draf React + TypeScript. Semua asumsi wajib dicek manusia sebelum draf disetujui."
+        description="Analisis screenshot, buat draf struktur UI, dan kelola asumsi."
+        actions={
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => void loadScreens()}>Muat ulang</Button>
+          </div>
+        }
       />
 
-      {notice && (
-        <div className="mb-4">
-          <Alert tone="success">{notice}</Alert>
-        </div>
-      )}
-      {error && (
-        <div className="mb-4">
-          <Alert tone="danger" title="Gagal">{error}</Alert>
-        </div>
-      )}
+      {error && <Alert tone="danger" title={error} />}
+      {notice && <Alert tone="success" title={notice} />}
 
-      <Card>
-        <div className="flex flex-wrap items-end gap-3">
+      {/* Filter bar */}
+      <Card className="p-4">
+        <div className="flex flex-wrap items-end gap-4">
           <Field label="Aplikasi">
             <select
-              className="input min-w-[170px]"
+              className="input min-w-[200px]"
               value={appId ?? ''}
               onChange={(e) => {
                 setAppId(Number(e.target.value) || null)
@@ -265,46 +344,44 @@ export function UIReconstructionPage() {
               value={screenId ?? ''}
               onChange={(e) => setScreenId(Number(e.target.value) || null)}
             >
-              <option value="">— pilih layar —</option>
+              <option value="">— pilih —</option>
               {screens.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.title}
+                  {s.title} ({new Date(s.captured_at).toLocaleString('id-ID')})
                 </option>
               ))}
             </select>
           </Field>
 
-          <Button onClick={() => void handleAnalyze()} disabled={!screenId} loading={analyzing}>
-            Analisis & buat draf
-          </Button>
+          <div className="ml-auto flex gap-2">
+            <Button
+              size="sm"
+              variant={analyzing ? 'secondary' : 'primary'}
+              disabled={analyzing || !screenId}
+              onClick={handleAnalyze}
+            >
+              <Spinner className={analyzing ? 'h-3.5 w-3.5 mr-1' : 'hidden'} />
+              Analisis & buat draf
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={analyzing || !screenId}
+              onClick={handleAIAnalyze}
+            >
+              <IconMagic size={14} className="mr-1" />
+              AI Vision
+            </Button>
+          </div>
         </div>
-        {screens.length === 0 && projectId && (
-          <p className="mt-3 text-xs text-slate-500">
-            Belum ada layar di project ini. Ambil screenshot dulu lewat Capture Studio.
-          </p>
-        )}
       </Card>
 
-      {!screenId ? (
-        <div className="mt-4">
-          <EmptyState
-            title="Pilih layar dulu"
-            description="Pilih salah satu layar hasil capture untuk dianalisis menjadi draf React."
-          />
-        </div>
-      ) : loading ? (
-        <div className="flex justify-center py-16">
-          <Spinner className="h-6 w-6 text-slate-300" />
-        </div>
-      ) : !draft ? (
-        <div className="mt-4">
-          <EmptyState
-            title="Belum ada draf rekonstruksi"
-            description="Tekan 'Analisis & buat draf' untuk membaca struktur layar dan membuat draf React."
-          />
-        </div>
-      ) : (
-        <>
+      {screenId && !draft && (
+        <EmptyState title="Belum ada draf" description="Klik 'Analisis & buat draf' untuk memulai." />
+      )}
+
+      {draft && (
+        <div className="space-y-6">
           {/* Ringkasan draf */}
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <Badge tone={draft.status === 'approved' ? 'success' : draft.status === 'rejected' ? 'danger' : 'warning'}>
@@ -317,6 +394,34 @@ export function UIReconstructionPage() {
             <span className="text-xs text-slate-500">
               dibuat oleh {draft.generated_by} · {new Date(draft.created_at).toLocaleString('id-ID')}
             </span>
+            
+            {/* AI Status */}
+            {draft.layout?.ai_status && (
+              <>
+                {draft.layout.ai_status === 'success' && (
+                  <Badge tone="success">
+                    <span className="flex items-center gap-1">
+                      <IconInfo size={10} /> AI Vision aktif ({draft.layout.ai_model || 'Gemini'})
+                    </span>
+                  </Badge>
+                )}
+                {draft.layout.ai_status === 'failed' && (
+                  <Badge tone="danger">
+                    <span className="flex items-center gap-1">
+                      <IconWarning size={10} /> AI gagal: {draft.layout.ai_error || 'Unknown error'}
+                    </span>
+                  </Badge>
+                )}
+                {draft.layout.ai_status === 'not_configured' && (
+                  <Badge tone="warning">
+                    <span className="flex items-center gap-1">
+                      <IconWarning size={10} /> AI belum aktif: {draft.layout.ai_error || 'GEMINI_API_KEY tidak dikonfigurasi'}
+                    </span>
+                  </Badge>
+                )}
+              </>
+            )}
+            
             {canReview && (
               <div className="ml-auto flex gap-2">
                 <Button
@@ -333,7 +438,7 @@ export function UIReconstructionPage() {
             )}
           </div>
 
-          {/* Perbandingan: asli vs wireframe */}
+          {/* Perbandingan: asli vs Draf struktur (editor kotak) */}
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <Card title="Tampilan asli" description="Screenshot hasil capture (versi termasking).">
               {screenshot ? (
@@ -350,211 +455,142 @@ export function UIReconstructionPage() {
             </Card>
 
             <Card
-              title="Draf struktur"
-              description="Peta komponen yang terdeteksi mesin — bandingkan dengan aslinya."
+              title="Draf struktur (Editor Kotak)"
+              description="Screenshot dengan overlay kotak komponen. Drag/resize kotak, klik kanan untuk menu, B untuk gambar kotak manual."
             >
-              <Wireframe draft={draft} />
+              {screenshot ? (
+                <>
+                  {!isEditorOpen ? (
+                    <div className="grid aspect-[16/10] place-items-center gap-4 p-8 border-2 border-dashed border-white/20 rounded-xl">
+                      <div className="text-center">
+                        <p className="text-lg font-medium text-slate-300">Editor Kotak Hotspot</p>
+                        <p className="text-sm text-slate-500 mt-1">
+                          Klik tombol di bawah untuk membuka editor mode layar penuh
+                        </p>
+                        <img
+                          src={screenshot}
+                          alt="Preview screenshot"
+                          className="mt-4 max-h-48 mx-auto rounded border border-white/10 shadow-lg"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-center gap-3 py-4">
+                    {!isEditorOpen && screenshot && (
+                      <button
+                        type="button"
+                        onClick={() => setIsEditorOpen(true)}
+                        className="h-10 px-5 rounded-lg bg-brand-500 text-white font-medium text-sm hover:bg-brand-600 transition-colors"
+                      >
+                        Buka Editor Layar Penuh
+                      </button>
+                    )}
+                  </div>
+                  {isEditorOpen && (
+                    <HotspotEditor
+                      screenId={screenId ?? undefined}
+                      screenshot={screenshot}
+                      boxes={hotspots}
+                      saving={false}
+                      onChange={handleHotspotsChange}
+                      onClose={() => setIsEditorOpen(false)}
+                      onSaveManual={undefined}
+                    />
+                  )}
+                </>
+              ) : (
+                <div className="grid aspect-[16/10] place-items-center text-xs text-slate-400">
+                  Screenshot tidak tersedia untuk editor kotak
+                </div>
+              )}
             </Card>
           </div>
 
-          {/* Komponen */}
-          <Card title="Komponen terdeteksi" className="mt-4">
-            {grouped.map(([region, components]) => (
-              <div key={region} className="mb-4 last:mb-0">
-                <p className="mb-1.5 text-[13px] font-medium capitalize text-slate-700">{region}</p>
-                <ul className="flex flex-wrap gap-2">
-                  {components.map((component) => (
-                    <li key={component.id}>
-                      <div
-                        className={cn(
-                          'rounded border px-2.5 py-1.5 text-xs',
-                          COMPONENT_COLOR[component.component_type] ?? 'border-slate-300 bg-slate-50 text-slate-700',
-                        )}
-                      >
-                        <span className="font-medium">{component.component_type}</span>
-                        {component.label && <span className="ml-1.5 opacity-80">{component.label}</span>}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-            <p className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500">
-              Label komponen bisa dikoreksi manual bila mesin salah membaca.
-            </p>
-            <ul className="mt-2 space-y-2">
-              {(draft.components ?? []).slice(0, 12).map((component) => (
-                <li key={component.id} className="flex items-center gap-2">
-                  <span className="w-24 shrink-0 text-[11px] uppercase tracking-wide text-slate-400">
-                    {component.component_type}
-                  </span>
-                  <input
-                    className="input h-8 py-1 text-[13px]"
-                    defaultValue={component.label ?? ''}
-                    placeholder="label komponen"
-                    onBlur={(e) => {
-                      if (e.target.value !== (component.label ?? '')) {
-                        void handleComponentEdit(component, e.target.value)
-                      }
-                    }}
-                  />
-                </li>
-              ))}
-            </ul>
-          </Card>
+          {/* Komponen tanpa posisi */}
+          {getComponentsWithoutPosition(draft).length > 0 && (
+            <Card title="Komponen belum memiliki posisi" className="mt-4">
+              <p className="text-sm text-slate-600 mb-2">
+                {getComponentsWithoutPosition(draft).length} komponen tidak memiliki koordinat (x, y). 
+                Gunakan editor di atas untuk menempatkan kotak, atau klik kanan pada area kosong untuk menambah kotak manual.
+              </p>
+              <ul className="space-y-1 max-h-40 overflow-y-auto">
+                {getComponentsWithoutPosition(draft).map((component) => (
+                  <li key={component.id} className="text-xs text-slate-700 flex items-center gap-2">
+                    <Badge tone="neutral">{component.component_type}</Badge>
+                    <span>{component.label || '(tanpa label)'}</span>
+                    <span className="text-slate-400">(source: {component.source})</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
 
           {/* Asumsi */}
-          <Card
-            title="Asumsi yang harus dicek manusia"
-            description="Aturan bisnis tidak bisa dibaca dari tampilan. Centang setiap asumsi yang sudah Anda verifikasi."
-            className="mt-4"
-          >
-            <ul className="space-y-2">
-              {draft.assumptions.map((assumption) => (
-                <li
-                  key={assumption.id}
-                  className="flex items-start gap-3 rounded border border-slate-200 px-3 py-2.5"
-                >
-                  <button
-                    type="button"
-                    onClick={() => void handleResolve(assumption.id, !assumption.resolved)}
-                    aria-label={assumption.resolved ? 'Batalkan tanda dicek' : 'Tandai sudah dicek'}
-                    className={cn(
-                      'mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded border transition-colors',
-                      assumption.resolved
-                        ? 'border-emerald-600 bg-emerald-600 text-white'
-                        : 'border-slate-300 bg-white hover:border-slate-400',
-                    )}
-                  >
-                    {assumption.resolved && <IconCheck size={13} />}
-                  </button>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[13px] font-medium text-slate-900">{assumption.topic}</span>
-                      <Badge tone={CONFIDENCE_TONE[assumption.confidence] ?? 'neutral'}>
-                        keyakinan {assumption.confidence}
-                      </Badge>
+          {draft.assumptions && draft.assumptions.length > 0 && (
+            <Card title="Asumsi (wajib dicek manusia)">
+              <ul className="space-y-2">
+                {draft.assumptions.map((a) => (
+                  <li key={a.id} className="flex items-start gap-3 p-3 rounded border border-slate-200 bg-slate-50">
+                    <Badge tone={CONFIDENCE_TONE[a.confidence]}>{a.confidence}</Badge>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-slate-800">{a.topic}</p>
+                      <p className="text-sm text-slate-600">{a.description}</p>
                     </div>
-                    <p className="mt-1 text-xs leading-relaxed text-slate-600">{assumption.description}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </Card>
+                    {a.resolved ? (
+                      <Badge tone="success">Sudah dicek</Badge>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline-primary"
+                        onClick={() => void reconstructionApi.resolve(a.id).then(() => void loadDraft(screenId!))}
+                      >
+                        Tandai dicek
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
 
-          {/* Kode */}
-          <Card
-            title="Draf React + TypeScript"
-            description="Bisa diedit langsung di sini. Setiap perubahan mengembalikan status ke draft."
-            className="mt-4"
-            actions={
-              <div className="flex gap-2">
+          {/* Kode React */}
+          <Card title="Kode React (draf)" description="Hasil generasi — bisa diedit manual.">
+            <div className="relative">
+              <textarea
+                className="w-full h-[400px] font-mono text-sm p-3 border border-slate-300 rounded bg-slate-50 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                spellCheck={false}
+              />
+              <div className="absolute top-2 right-2 flex gap-1">
                 <Button
                   size="sm"
                   variant="secondary"
-                  onClick={() => void navigator.clipboard?.writeText(code)}
+                  onClick={() => navigator.clipboard.writeText(code)}
                 >
-                  <IconExternal size={13} /> Salin
+                  Salin
                 </Button>
-                <Button size="sm" onClick={() => void handleSaveCode()}>
-                  Simpan kode
+                <Button
+                  size="sm"
+                  disabled={code === draft.code_text}
+                  onClick={async () => {
+                    try {
+                      await reconstructionApi.updateCode(draft.screen_id, code)
+                      const updated = await reconstructionApi.get(screenId!)
+                      setDraft(updated)
+                      setNotice('Kode disimpan')
+                    } catch (err) {
+                      setError(err instanceof ApiError ? err.message : 'Gagal simpan kode')
+                    }
+                  }}
+                >
+                  Simpan
                 </Button>
               </div>
-            }
-          >
-            <textarea
-              className="input min-h-[380px] font-mono text-[12px] leading-relaxed"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              spellCheck={false}
-            />
+            </div>
           </Card>
-        </>
-      )}
-    </div>
-  )
-}
-
-function Wireframe({ draft }: { draft: Reconstruction }) {
-  const viewport = draft.layout?.viewport ?? { width: 1440, height: 900 }
-  const regions = draft.layout?.regions ?? {}
-  const sections = (draft.layout as { sections?: DraftSection[] } | null)?.sections ?? []
-  const vw = viewport.width || 1440
-  const vh = viewport.height || 900
-
-  const pct = (value: number, total: number) => `${(value / total) * 100}%`
-
-  return (
-    <div
-      className="relative w-full overflow-hidden rounded border border-slate-200 bg-slate-50"
-      style={{ aspectRatio: `${vw} / ${vh}` }}
-    >
-      {/* Area sidebar bila terdeteksi */}
-      {regions.sidebar && (
-        <div
-          className="absolute top-0 bg-ink-900/90"
-          style={{
-            left: 0,
-            width: pct(regions.sidebar.w, vw),
-            height: '100%',
-          }}
-        >
-          <span className="absolute left-1.5 top-1.5 text-[9px] font-medium text-white/70">
-            sidebar
-          </span>
-        </div>
-      )}
-
-      {/* Blueprint per section */}
-      {sections.map((section) => (
-        <div
-          key={section.index}
-          className="absolute rounded border border-dashed border-slate-300 bg-white/80"
-          style={{
-            left: pct(section.x, vw),
-            top: pct(section.top, vh),
-            width: pct(section.width, vw),
-            height: pct(Math.max(section.height, 24), vh),
-            minWidth: 90,
-          }}
-        >
-          <span className="absolute -top-[9px] left-1.5 rounded bg-slate-800 px-1.5 py-0.5 text-[9px] font-medium text-white">
-            {section.index}. {section.label}
-          </span>
-          <div className="flex flex-wrap gap-1 p-1.5">
-            {section.types.map((type) => (
-              <span
-                key={type}
-                className="rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[9px] text-slate-600"
-              >
-                {type}
-                <span className="ml-1 text-slate-400">×{countOf(section.items, type)}</span>
-              </span>
-            ))}
-          </div>
-        </div>
-      ))}
-
-      {sections.length === 0 && (
-        <div className="grid h-full place-items-center text-xs text-slate-400">
-          Belum ada struktur yang bisa digambar
         </div>
       )}
     </div>
   )
-}
-
-interface DraftSection {
-  index: number
-  label: string
-  types: string[]
-  top: number
-  height: number
-  x: number
-  width: number
-  items: { type: string; label: string | null }[]
-}
-
-function countOf(items: { type: string }[], type: string): number {
-  return items.filter((item) => item.type === type).length
 }

@@ -19,7 +19,6 @@ import {
   Modal,
   PageHeader,
 } from '../components/ui'
-import { IconPlus, IconExternal } from '../components/icons'
 
 export function DemoManagementPage() {
   const { can } = useAuth()
@@ -231,13 +230,13 @@ export function DemoManagementPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setActiveTab('links')}
-              className={`px-4 py-2 text-sm font-medium rounded transition-colors ${activeTab === 'links' ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+              className={`px-4 py-2 text-sm font-medium rounded transition-colors ${activeTab === 'links' ? 'bg-[#4268ff] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
             >
               Link Demo
             </button>
             <button
               onClick={() => setActiveTab('scenarios')}
-              className={`px-4 py-2 text-sm font-medium rounded transition-colors ${activeTab === 'scenarios' ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+              className={`px-4 py-2 text-sm font-medium rounded transition-colors ${activeTab === 'scenarios' ? 'bg-[#4268ff] text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
             >
               Skenario Demo
             </button>
@@ -249,7 +248,7 @@ export function DemoManagementPage() {
                 <Alert tone="warning">Anda tidak memiliki izin mengelola demo link.</Alert>
               ) : (
                 <Button onClick={() => setOpenCreateLink(true)} variant="primary">
-                  <IconPlus size={14} /> Buat Link Demo
+                  Buat Link Demo
                 </Button>
               )}
               {links.length === 0 && canManage && (
@@ -274,9 +273,9 @@ export function DemoManagementPage() {
                     <div className="flex items-center gap-2">
                       <Link
                         to={`/public/demo/${link.token}`}
-                        className="text-xs font-medium text-brand-600 hover:underline flex items-center gap-1"
+                        className="text-xs font-medium text-[#4268ff] hover:underline flex items-center gap-1"
                       >
-                        <IconExternal size={12} /> Buka Demo
+                        Buka Demo
                       </Link>
                       {canManage && (
                         <Button
@@ -292,12 +291,12 @@ export function DemoManagementPage() {
                             setOpenEditLink(true)
                           }}
                         >
-                          <IconExternal size={14} /> Edit
+                          Edit
                         </Button>
                       )}
                       {canManage && (
                         <Button variant="danger" size="sm" onClick={() => deleteLink(link)}>
-                          <IconExternal size={14} /> Hapus
+                          Hapus
                         </Button>
                       )}
                     </div>
@@ -311,7 +310,7 @@ export function DemoManagementPage() {
                 <Alert tone="warning">Anda tidak memiliki izin mengelola skenario demo.</Alert>
               ) : (
                 <Button onClick={() => setOpenCreateScenario(true)} variant="primary">
-                  <IconPlus size={14} /> Buat Skenario Demo
+                  Buat Skenario Demo
                 </Button>
               )}
               {scenarios.length === 0 && canManage && (
@@ -332,7 +331,7 @@ export function DemoManagementPage() {
                     <div className="flex items-center gap-2">
                       {canManage && (
                         <Button variant="secondary" size="sm" onClick={() => deleteScenario(scenario)}>
-                          <IconExternal size={14} /> Hapus
+                          Hapus
                         </Button>
                       )}
                     </div>
@@ -425,7 +424,7 @@ export function DemoManagementPage() {
               ))}
             </ul>
             <Button variant="secondary" size="sm" onClick={() => setScenarioSteps([...scenarioSteps, { screen_id: 0, title: '', instructor_notes: '' }] )}>
-              <IconPlus size={14} /> Tambah Langkah
+              Tambah Langkah
             </Button>
           </div>
         </div>

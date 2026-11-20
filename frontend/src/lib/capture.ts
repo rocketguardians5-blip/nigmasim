@@ -28,6 +28,17 @@ export interface ScreenElement {
   bounding_box: { x: number; y: number; w: number; h: number } | null
   mask: boolean
   notes: string | null
+  // Enhanced detection fields
+  percent_box?: { x: number; y: number; w: number; h: number } | null
+  source?: string
+  tag?: string | null
+  href?: string | null
+  target?: string | null
+  role?: string | null
+  input_type?: string | null
+  parent_element_id?: string | null
+  state?: string | null
+  confidence?: number
 }
 
 export interface Interaction {
@@ -88,6 +99,20 @@ export interface NavigationNode {
   children: NavigationNode[]
 }
 
+export interface WorkerProcessInfo {
+  pid: number
+  windows_session_id: number | null
+  /** true kalau worker berjalan di sesi interaktif (SessionId != 0 + ada desktop) */
+  interactive: boolean
+  browser_children: Array<{ pid: number; name: string; windows_session_id: number | null }>
+}
+
+export interface WorkerHealth extends WorkerProcessInfo {
+  status: string
+  role: string
+  headless: boolean
+}
+
 export interface WorkerState {
   status: string
   session_id: string | null
@@ -95,6 +120,98 @@ export interface WorkerState {
   current_title?: string | null
   event_count?: number
   last_capture?: { file_name: string; url: string; title: string; captured_at: number } | null
+  process?: WorkerProcessInfo
+  capture_states?: string[]
+  har_count?: number
+  component_states_count?: number
+  form_schemas_count?: number
+}
+
+/** ====== RECONSTRUCTION TYPES ====== */
+
+export interface HarEntry {
+  request: {
+    url: string
+    method: string
+    headers: Record<string, string>
+    postData: string | null
+  }
+  response: {
+    status: number
+    statusText: string
+    headers: Record<string, string>
+    body: any
+  }
+  timings: { duration: number }
+  startedDateTime: string
+  error?: string
+}
+
+export interface StorageSnapshot {
+  timestamp: number
+  url: string
+  localStorage: Record<string, string>
+  sessionStorage: Record<string, string>
+}
+
+export interface ComponentState {
+  type: 'dropdown' | 'modal' | 'tabs' | 'accordion'
+  selector: string
+  label: string
+  isOpen: boolean
+  options?: string[]
+  tabs?: string[]
+  activeIndex?: number
+  boundingBox?: { x: number; y: number; w: number; h: number }
+}
+
+export interface FormFieldSchema {
+  name: string
+  type: string
+  tag: string
+  label: string
+  required: boolean
+  placeholder: string
+  options: Array<{ value: string; label: string; selected: boolean }>
+  checked?: boolean
+}
+
+export interface FormSchema {
+  formIndex: number
+  selector: string
+  action: string
+  method: string
+  fields: FormFieldSchema[]
+  boundingBox: { x: number; y: number; w: number; h: number }
+}
+
+export interface CaptureStateMeta {
+  state_name: string
+  url: string
+  title: string
+  viewport: { width: number; height: number }
+  full_page: boolean
+  captured_at: number
+  sha256: string
+  file_path: string
+  file_name: string
+  elements: ScreenElement[]
+  structure: any
+  interactions: any[]
+  detection_report: any
+}
+
+export interface SessionData {
+  session_id: string
+  url: string
+  allowed_hosts: string[]
+  captures: Record<string, CaptureStateMeta>
+  har_entries: HarEntry[]
+  storage_snapshots: StorageSnapshot[]
+  component_states: Record<string, ComponentState>
+  form_schemas: FormSchema[]
+  html_exports: Record<string, string>
+  events: any[]
 }
 
 export const captureApi = {
@@ -138,18 +255,52 @@ export const captureApi = {
  * yang menjalankan backend. Worker hanya listen di loopback (127.0.0.1), jadi
  * hanya browser pada perangkat yang sama yang bisa memanggilnya.
  */
-const WORKER_URL = import.meta.env.VITE_WORKER_URL ?? 'http://127.0.0.1:8010'
+const STORAGE_KEY_WORKER_URL = 'nigmasim_capture_worker_url'
 
-async function workerRequest(path: string, init: RequestInit = {}): Promise<unknown> {
-  const res = await fetch(`${WORKER_URL}${path}`, {
+export function getWorkerUrl(): string {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem(STORAGE_KEY_WORKER_URL)
+    if (saved && saved.trim()) return saved.trim().replace(/\/+$/, '')
+  }
+  return (
+    import.meta.env.VITE_CAPTURE_WORKER_URL ??
+    import.meta.env.VITE_WORKER_URL ??
+    'http://127.0.0.1:8010'
+  )
+}
+
+export function setWorkerUrl(url: string): void {
+  if (typeof window !== 'undefined') {
+    if (!url || !url.trim()) {
+      localStorage.removeItem(STORAGE_KEY_WORKER_URL)
+    } else {
+      localStorage.setItem(STORAGE_KEY_WORKER_URL, url.trim().replace(/\/+$/, ''))
+    }
+  }
+}
+
+async function workerRequest<T = unknown>(path: string, init: RequestInit = {}): Promise<T> {
+  const base = getWorkerUrl()
+  const res = await fetch(`${base}${path}`, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...init.headers },
   })
   if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(text || `Worker tidak merespons (${res.status})`)
+    let msg = `Worker tidak merespons (${res.status})`
+    try {
+      const data = await res.json()
+      if (data && typeof data === 'object' && 'detail' in data) {
+        msg = String((data as { detail: unknown }).detail)
+      }
+    } catch {
+      const text = await res.text().catch(() => '')
+      if (text) msg = text
+    }
+    const err = new Error(msg)
+    ;(err as any).status = res.status
+    throw err
   }
-  return res.json()
+  return res.json() as Promise<T>
 }
 
 export const workerApi = {
@@ -169,11 +320,28 @@ export const workerApi = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
-  state: () => workerRequest('/session/state'),
+  captureState: (body: { state_name: string; label?: string; full_page?: boolean }) =>
+    workerRequest('/session/capture-state', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  health: () => workerRequest<WorkerHealth>('/health'),
+  processInfo: () => workerRequest<WorkerProcessInfo>('/process'),
+  state: () => workerRequest<WorkerState>('/session/state'),
   focus: () => workerRequest('/session/focus', { method: 'POST', body: '{}' }),
   pause: () => workerRequest('/session/pause', { method: 'POST', body: '{}' }),
   resume: () => workerRequest('/session/resume', { method: 'POST', body: '{}' }),
   stop: () => workerRequest('/session/stop', { method: 'POST', body: '{}' }),
+  // Reconstruction endpoints
+  har: () => workerRequest<HarEntry[]>('/session/har'),
+  storage: () => workerRequest<StorageSnapshot>('/session/storage'),
+  componentStates: () => workerRequest<Record<string, ComponentState>>('/session/component-states'),
+  formSchemas: () => workerRequest<FormSchema[]>('/session/form-schemas'),
+  savePage: (exportName?: string) => workerRequest('/session/save-page', {
+    method: 'POST',
+    body: JSON.stringify({ export_name: exportName }),
+  }),
+  sessionData: () => workerRequest<SessionData>('/session/data'),
 }
 
 export const screensApi = {

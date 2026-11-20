@@ -210,6 +210,16 @@ def record_capture(
                 label=(str(raw["label"])[:200] if raw.get("label") else None),
                 selector_or_hint=(str(raw["hint"])[:500] if raw.get("hint") else None),
                 bounding_box=raw.get("box"),
+                percent_box=raw.get("percent_box"),
+                source=str(raw.get("source") or "dom")[:20],
+                tag=str(raw.get("tag") or "")[:40] or None,
+                href=str(raw.get("href") or "")[:500] or None,
+                target=str(raw.get("target") or "")[:20] or None,
+                role=str(raw.get("role") or "")[:40] or None,
+                input_type=str(raw.get("input_type") or "")[:20] or None,
+                parent_element_id=str(raw.get("parent_id") or "")[:80] or None,
+                state=str(raw.get("state") or "")[:20] or None,
+                confidence=float(raw.get("confidence") or 1.0),
                 mask=False,
             )
         )

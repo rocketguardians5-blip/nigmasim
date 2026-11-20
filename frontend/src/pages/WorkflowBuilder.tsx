@@ -14,7 +14,6 @@ import {
   PageHeader,
   Spinner,
 } from '../components/ui'
-import { IconPlus } from '../components/icons'
 
 const ROLE_OPTIONS = [
   { value: 'staf', label: 'Staf' },
@@ -316,7 +315,7 @@ export function WorkflowBuilderPage() {
                     </select>
                   </Field>
                   <Button onClick={() => void addTransition()}>
-                    <IconPlus size={14} /> Tambah
+                    Tambah
                   </Button>
                 </div>
               </div>
