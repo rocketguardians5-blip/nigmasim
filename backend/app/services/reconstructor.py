@@ -13,6 +13,7 @@ data keluarannya sengaja dibuat sama supaya tidak perlu mengubah schema.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -25,7 +26,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.core.config import settings, ALLOWED_GEMINI_MODELS
 from app.models.capture import Screen, ScreenElement
 from app.models.reconstruction import (
     Reconstruction,
@@ -400,6 +401,7 @@ def store_analysis(
         new_layout["ai_status"] = analysis.ai_status
         new_layout["ai_model"] = analysis.ai_model
         new_layout["ai_error"] = analysis.ai_error
+        new_layout["ai_source"] = analysis.source
         reconstruction.reviewed_by = None
         reconstruction.reviewed_at = None
 
@@ -426,6 +428,7 @@ def store_analysis(
         new_layout["ai_status"] = analysis.ai_status
         new_layout["ai_model"] = analysis.ai_model
         new_layout["ai_error"] = analysis.ai_error
+        new_layout["ai_source"] = analysis.source
         reconstruction = Reconstruction(
             screen_id=screen.id,
             project_id=screen.project_id,
@@ -632,21 +635,71 @@ def _image_mime_type(suffix: str) -> str:
 
 # Model yang baru saja gagal (timeout/503/429) dilewati sementara supaya
 # analisis berikutnya tidak menunggu model yang sedang down.
-_GEMINI_MODEL_COOLDOWN_SECONDS = 300.0
-_gemini_model_down_until: dict[str, float] = {}
+# NOTE: Cooldown dihapus, diganti dengan backoff per-request di bawah.
 
 
-def _gemini_models_to_try() -> list[str]:
-    chain = settings.gemini_model_chain
-    now = time.monotonic()
-    available = [m for m in chain if _gemini_model_down_until.get(m, 0.0) <= now]
-    return available or chain
+def _parse_retry_after(header: str | None) -> float | None:
+    """Parse Retry-After header (seconds or HTTP-date). Return seconds to wait."""
+    if not header:
+        return None
+    header = header.strip()
+    # Try integer seconds
+    try:
+        return float(header)
+    except ValueError:
+        pass
+    # Try HTTP-date
+    try:
+        import email.utils
+        retry_date = email.utils.parsedate_to_datetime(header)
+        if retry_date:
+            import datetime
+            delta = retry_date - datetime.datetime.now(datetime.timezone.utc)
+            return max(0.0, delta.total_seconds())
+    except Exception:
+        pass
+    return None
 
 
 async def analyze_with_ai(screen: Screen, existing_analysis: Analysis) -> Analysis:
     """Kirim screenshot ke Gemini vision model, merge hasil ke existing analysis."""
     if not settings.gemini_api_key:
         if settings.app_env == "test":
+            # Runtime validation (pengaman): tolak model di luar daftar izin
+            allowed = set(ALLOWED_GEMINI_MODELS)
+            primary_model = settings.gemini_model
+            if primary_model not in allowed:
+                error_msg = f"Model tidak diizinkan (runtime): {primary_model}. Pilihan: {', '.join(allowed)}."
+                logger.error(error_msg)
+                existing_analysis.ai_status = "failed"
+                existing_analysis.ai_error = error_msg
+                existing_analysis.ai_model = primary_model
+                existing_analysis.source = "rule-engine"
+                return existing_analysis
+            # Validasi model cadangan mentah (termasuk yang difilter oleh gemini_model_chain)
+            raw_fallback_models: list[str] = []
+            if settings.gemini_allow_fallback and settings.gemini_fallback_models.strip():
+                for item in settings.gemini_fallback_models.split(","):
+                    name = item.strip()
+                    if name:
+                        raw_fallback_models.append(name)
+            for model in raw_fallback_models:
+                if model not in allowed:
+                    error_msg = f"Model cadangan tidak diizinkan (runtime): {model}. Pilihan: {', '.join(allowed)}."
+                    logger.error(error_msg)
+                    existing_analysis.ai_status = "failed"
+                    existing_analysis.ai_error = error_msg
+                    existing_analysis.ai_model = primary_model
+                    existing_analysis.source = "rule-engine"
+                    return existing_analysis
+                if model == primary_model:
+                    error_msg = f"Model cadangan ({model}) tidak boleh sama dengan model utama ({primary_model})."
+                    logger.error(error_msg)
+                    existing_analysis.ai_status = "failed"
+                    existing_analysis.ai_error = error_msg
+                    existing_analysis.ai_model = primary_model
+                    existing_analysis.source = "rule-engine"
+                    return existing_analysis
             # Mock AI vision output untuk lingkungan test
             existing_analysis.ai_model = "mock-vision-test"
             existing_analysis.ai_status = "success"
@@ -750,69 +803,182 @@ Output HANYA JSON valid sesuai format di system prompt."""
             },
         }
 
+        primary_model = settings.gemini_primary_model
+        # Validasi model cadangan MENTAH (sebelum difilter oleh gemini_model_chain)
+        # untuk memastikan model tidak valid ditolak eksplisit, bukan diam-diam diabaikan.
+        raw_fallback_models: list[str] = []
+        if settings.gemini_allow_fallback and settings.gemini_fallback_models.strip():
+            for item in settings.gemini_fallback_models.split(","):
+                name = item.strip()
+                if name:
+                    raw_fallback_models.append(name)
+        fallback_models = [m for m in settings.gemini_model_chain if m != primary_model]
+        max_retries = max(0, settings.gemini_max_retries)
+        base_delay = settings.gemini_retry_base_delay
+        max_delay = settings.gemini_retry_max_delay
+
+        # Runtime validation (pengaman kedua): tolak model di luar daftar izin
+        allowed = set(ALLOWED_GEMINI_MODELS)
+        if primary_model not in allowed:
+            error_msg = f"Model tidak diizinkan (runtime): {primary_model}. Pilihan: {', '.join(allowed)}."
+            logger.error(error_msg)
+            existing_analysis.ai_status = "failed"
+            existing_analysis.ai_error = error_msg
+            existing_analysis.ai_model = primary_model
+            existing_analysis.source = "rule-engine"
+            return existing_analysis
+        # Validasi model cadangan mentah (termasuk yang difilter oleh gemini_model_chain)
+        for model in raw_fallback_models:
+            if model not in allowed:
+                error_msg = f"Model cadangan tidak diizinkan (runtime): {model}. Pilihan: {', '.join(allowed)}."
+                logger.error(error_msg)
+                existing_analysis.ai_status = "failed"
+                existing_analysis.ai_error = error_msg
+                existing_analysis.ai_model = primary_model
+                existing_analysis.source = "rule-engine"
+                return existing_analysis
+            if model == primary_model:
+                error_msg = f"Model cadangan ({model}) tidak boleh sama dengan model utama ({primary_model})."
+                logger.error(error_msg)
+                existing_analysis.ai_status = "failed"
+                existing_analysis.ai_error = error_msg
+                existing_analysis.ai_model = primary_model
+                existing_analysis.source = "rule-engine"
+                return existing_analysis
+
         data = None
         used_model = ""
+        last_error: tuple[int, str] | None = None
+
         async with httpx.AsyncClient(timeout=httpx.Timeout(90.0, connect=15.0)) as client:
-            for model in _gemini_models_to_try():
-                # Percobaan pertama dibatasi lebih pendek: kalau model utama sedang
-                # bermasalah, fallback tidak perlu menunggu terlalu lama.
-                attempt_timeout = (
-                    httpx.Timeout(45.0, connect=15.0)
-                    if model == settings.gemini_model
-                    else httpx.Timeout(90.0, connect=15.0)
-                )
+            # Coba model utama dengan retry
+            for attempt in range(max_retries + 1):
                 try:
                     resp = await client.post(
-                        f"{settings.gemini_base_url}/models/{model}:generateContent",
+                        f"{settings.gemini_base_url}/models/{primary_model}:generateContent",
                         headers={
                             "x-goog-api-key": settings.gemini_api_key,
                             "Content-Type": "application/json",
                         },
                         json=payload,
-                        timeout=attempt_timeout,
+                        timeout=httpx.Timeout(90.0, connect=15.0),
                     )
-                except httpx.TimeoutException:
-                    logger.warning("Gemini timeout pada %s, coba model berikutnya", model)
-                    _gemini_model_down_until[model] = (
-                        time.monotonic() + _GEMINI_MODEL_COOLDOWN_SECONDS
-                    )
-                    continue
+                except httpx.TimeoutException as e:
+                    last_error = (408, f"Timeout: {e}")
+                    if attempt < max_retries:
+                        delay = min(base_delay * (3 ** attempt), max_delay)
+                        logger.warning(
+                            "Gemini %s timeout (percobaan %d/%d), retry dalam %.0fs",
+                            primary_model, attempt + 1, max_retries + 1, delay
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    break
 
-                if resp.status_code in (404, 429, 503):
-                    logger.warning(
-                        "Gemini %s tidak tersedia (HTTP %s), coba model berikutnya",
-                        model,
-                        resp.status_code,
-                    )
-                    _gemini_model_down_until[model] = (
-                        time.monotonic() + _GEMINI_MODEL_COOLDOWN_SECONDS
-                    )
-                    continue
-                if resp.status_code >= 400:
-                    logger.error(
-                        "Gemini error %s pada %s: %s", resp.status_code, model, resp.text[:800]
-                    )
+                if resp.status_code == 404:
+                    # Model tidak ditemukan - jangan retry, error langsung
+                    error_detail = resp.text[:500]
+                    logger.error("Gemini model '%s' tidak ditemukan (404): %s", primary_model, error_detail)
                     existing_analysis.ai_status = "failed"
-                    existing_analysis.ai_error = f"Gemini error {resp.status_code}: {resp.text[:200]}"
+                    existing_analysis.ai_error = (
+                        f"Model tidak ditemukan: {primary_model}. "
+                        f"Cek GEMINI_MODEL di .env. Detail: {error_detail}"
+                    )
+                    existing_analysis.ai_model = primary_model
                     existing_analysis.source = "rule-engine"
                     return existing_analysis
 
+                if resp.status_code in (429, 503):
+                    # Rate limit / service unavailable - retry dengan backoff
+                    retry_after = _parse_retry_after(resp.headers.get("Retry-After"))
+                    last_error = (resp.status_code, resp.text[:500])
+                    if attempt < max_retries:
+                        delay = retry_after if retry_after is not None else min(base_delay * (3 ** attempt), max_delay)
+                        logger.warning(
+                            "Gemini %s error %s (percobaan %d/%d), retry dalam %.0fs",
+                            primary_model, resp.status_code, attempt + 1, max_retries + 1, delay
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    # Sudah habis retry
+                    break
+
+                if resp.status_code >= 400:
+                    # Error lain - tidak retry, error langsung
+                    logger.error(
+                        "Gemini error %s pada %s: %s", resp.status_code, primary_model, resp.text[:800]
+                    )
+                    existing_analysis.ai_status = "failed"
+                    existing_analysis.ai_error = f"Gemini error {resp.status_code}: {resp.text[:200]}"
+                    existing_analysis.ai_model = primary_model
+                    existing_analysis.source = "rule-engine"
+                    return existing_analysis
+
+                # Sukses
                 data = resp.json()
-                used_model = model
+                used_model = primary_model
                 break
 
+            # Fallback models (hanya jika diaktifkan)
+            if data is None and settings.gemini_allow_fallback and fallback_models:
+                for model in fallback_models:
+                    try:
+                        resp = await client.post(
+                            f"{settings.gemini_base_url}/models/{model}:generateContent",
+                            headers={
+                                "x-goog-api-key": settings.gemini_api_key,
+                                "Content-Type": "application/json",
+                            },
+                            json=payload,
+                            timeout=httpx.Timeout(90.0, connect=15.0),
+                        )
+                    except httpx.TimeoutException:
+                        logger.warning("Gemini fallback %s timeout, coba model berikutnya", model)
+                        continue
+
+                    if resp.status_code in (404, 429, 503):
+                        logger.warning(
+                            "Gemini fallback %s tidak tersedia (HTTP %s), coba model berikutnya",
+                            model, resp.status_code
+                        )
+                        continue
+                    if resp.status_code >= 400:
+                        logger.error(
+                            "Gemini fallback error %s pada %s: %s", resp.status_code, model, resp.text[:800]
+                        )
+                        continue
+
+                    data = resp.json()
+                    used_model = model
+                    break
+
         if data is None:
-            logger.error(
-                "Semua model Gemini gagal dipanggil: %s", ", ".join(settings.gemini_model_chain)
-            )
+            # Semua percobaan gagal
+            if last_error:
+                status_code, error_text = last_error
+                if status_code == 408:
+                    error_msg = f"Timeout setelah {max_retries + 1} percobaan pada model {primary_model}"
+                elif status_code in (429, 503):
+                    error_msg = f"Model {primary_model} error {status_code} (rate limit/service unavailable) setelah {max_retries + 1} percobaan. Saran: tunggu sebentar, cek kuota/API key, atau aktifkan fallback dengan GEMINI_ALLOW_FALLBACK=true."
+                else:
+                    error_msg = f"Model {primary_model} error {status_code}: {error_text}"
+            else:
+                error_msg = f"Semua model gagal (primary: {primary_model}, fallback: {fallback_models})"
+
+            logger.error("Gemini analisis gagal: %s", error_msg)
             existing_analysis.ai_status = "failed"
-            existing_analysis.ai_error = "Semua model Gemini gagal dipanggil"
+            existing_analysis.ai_error = error_msg
+            existing_analysis.ai_model = primary_model
             existing_analysis.source = "rule-engine"
             return existing_analysis
 
         existing_analysis.ai_model = used_model
         existing_analysis.ai_status = "success"
-        existing_analysis.source = "hybrid"
+        # Set source: hybrid jika model utama, "fallback" jika model cadangan
+        if used_model != primary_model:
+            existing_analysis.source = "fallback"
+        else:
+            existing_analysis.source = "hybrid"
 
         candidates = data.get("candidates") or []
         if not candidates:
@@ -1065,7 +1231,34 @@ def _structure_to_components(structure: dict, viewport: dict, elements: list[Scr
 
     # Tabel -> table
     for table in structure.get("tables", []):
-        add_comp("table", table.get("label") or "Tabel", table.get("box"))
+        box = table.get("box")
+        if box and box.get("w", 0) > 0 and box.get("h", 0) > 0:
+            comp_type = "table"
+            label = table.get("label") or "Tabel"
+            props = {
+                "box": {
+                    "x": round(box.get("x", 0) / vw * 100, 1),
+                    "y": round(box.get("y", 0) / vh * 100, 1),
+                    "w": round(box.get("w", 0) / vw * 100, 1),
+                    "h": round(box.get("h", 0) / vh * 100, 1),
+                }
+            }
+            # Pass through table metadata (headers, row_count, column_count)
+            if "headers" in table:
+                props["headers"] = table["headers"]
+            if "row_count" in table:
+                props["row_count"] = table["row_count"]
+            if "column_count" in table:
+                props["column_count"] = table["column_count"]
+            components.append({
+                "region": "main",
+                "component_type": comp_type,
+                "label": label,
+                "props": props,
+                "order_index": order,
+                "source": "detected",
+            })
+            order += 1
 
     # Heading -> heading
     for heading in structure.get("headings", []):
@@ -1132,6 +1325,10 @@ def _structure_to_components(structure: dict, viewport: dict, elements: list[Scr
             elif pct_box["y"] < 12:
                 region = "header"
             
+            # Jika elemen di sidebar dan bertipe link, anggap sebagai nav-item
+            if region == "sidebar" and comp_type == "link":
+                comp_type = "nav-item"
+            
             add_comp(comp_type, label, pct_box, region=region, source=el.source or "detected")
 
     return components
@@ -1175,6 +1372,9 @@ def _map_element_to_component(el: ScreenElement) -> str:
     return "container"
 
 
+_FORM_FIELD_TYPES = {"input", "select", "textarea"}
+
+
 def _detect_layout_regions(structure: dict, viewport: dict, elements: list[ScreenElement] | None = None) -> dict:
     """Deteksi region layout (sidebar, header) dari struktur dan elemen."""
     vw = viewport.get("width", 1440)
@@ -1201,6 +1401,8 @@ def _detect_layout_regions(structure: dict, viewport: dict, elements: list[Scree
     # Tambahkan dari elements
     if elements:
         for el in elements:
+            if (el.element_type or "").lower() in _FORM_FIELD_TYPES:
+                continue
             box_px = _box_px(el)
             if box_px.get("w", 0) <= 0 or box_px.get("h", 0) <= 0:
                 continue
@@ -1253,6 +1455,8 @@ def _detect_layout_regions(structure: dict, viewport: dict, elements: list[Scree
         left_items = [n for n in structure.get("navs", []) if n.get("box", {}).get("x", 0) < vw * 0.25 and n.get("box", {}).get("w", 0) < vw * 0.3]
         if elements:
             for el in elements:
+                if (el.element_type or "").lower() in _FORM_FIELD_TYPES:
+                    continue
                 box_px = _box_px(el)
                 if box_px.get("w", 0) <= 0 or box_px.get("h", 0) <= 0:
                     continue
