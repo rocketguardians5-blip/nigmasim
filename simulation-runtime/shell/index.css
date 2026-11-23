@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    font-family:
+      ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+      sans-serif;
+  }
+
+  *:focus-visible {
+    outline: 2px solid #4268ff;
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .sim-input {
+    @apply h-9 w-full rounded border border-slate-300 bg-white px-3 text-[13px] text-slate-900 transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-brand-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400;
+  }
+
+  .sim-label {
+    @apply mb-1 block text-[12px] font-medium text-slate-600;
+  }
+
+  .sim-table-head {
+    @apply border-b border-slate-200 text-[11px] font-semibold uppercase tracking-wide text-slate-500;
+  }
+
+  .sim-table-row {
+    @apply border-b border-slate-100 text-[13px] text-slate-700 last:border-b-0;
+  }
+}

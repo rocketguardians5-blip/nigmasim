@@ -1,0 +1,102 @@
+{
+  "slug": "demo-client-api-nigma",
+  "name": "Demo Client",
+  "description": "Simulasi hidup Api-Nigma — dibangun dari 2 layar rekonstruksi yang disetujui.",
+  "project_id": 2,
+  "application_id": 2,
+  "application_name": "Api-Nigma",
+  "generated_at": "2026-11-23T03:40:02Z",
+  "runtime_path": "/?app=demo-client-api-nigma",
+  "screens": [
+    {
+      "key": "dashboard",
+      "title": "Dashboard Overview - API Nigma Portal - Developer API Gateway",
+      "route": "/dashboard",
+      "kind": "dashboard"
+    },
+    {
+      "key": "error-codes",
+      "title": "Katalog Referensi Kode Error - API Nigma - Developer API Gateway",
+      "route": "/error-codes",
+      "kind": "table"
+    }
+  ],
+  "errors": [
+    {
+      "screen_key": "masuk-ke-portal---api-nigma",
+      "screen_title": "Masuk ke Portal - API Nigma",
+      "reason": "Rekonstruksi tidak punya komponen atau section yang bisa dipakai."
+    },
+    {
+      "screen_key": "api-playground---interactive-http-client---developer-api-gat",
+      "screen_title": "API Playground - Interactive HTTP Client - Developer API Gateway",
+      "reason": "Rekonstruksi tidak punya komponen atau section yang bisa dipakai."
+    }
+  ],
+  "skipped": [
+    {
+      "screen_key": "masuk-ke-portal---api-nigma",
+      "screen_title": "Masuk ke Portal - API Nigma",
+      "screen_id": 3,
+      "capture_version": 1,
+      "reason": "Versi capture v1 dilewati (status belum ada rekonstruksi); memakai v2 yang sudah disetujui."
+    },
+    {
+      "screen_key": "api-playground---interactive-http-client---developer-api-gat",
+      "screen_title": "API Playground - Interactive HTTP Client - Developer API Gateway",
+      "screen_id": 6,
+      "capture_version": 1,
+      "reason": "Versi capture v1 dilewati (status draft); memakai v2 yang sudah disetujui."
+    }
+  ],
+  "assumptions": [
+    {
+      "screen_title": "Dashboard Overview - API Nigma Portal - Developer API Gateway",
+      "route": "/dashboard",
+      "items": [
+        {
+          "topic": "Aturan bisnis",
+          "description": "Aturan bisnis TIDAK bisa dibaca dari tampilan. Semua aturan wajib diisi manual oleh pemilik proses.",
+          "confidence": "low",
+          "resolved": true
+        },
+        {
+          "topic": "Layout",
+          "description": "Sidebar bersifat statis di kiri, header berisi navigasi global dan profil.",
+          "confidence": "high",
+          "resolved": true
+        },
+        {
+          "topic": "Komponen",
+          "description": "Elemen dengan teks 'Playground' di dalam kartu adalah link navigasi ke halaman playground spesifik.",
+          "confidence": "high",
+          "resolved": true
+        }
+      ]
+    },
+    {
+      "screen_title": "Katalog Referensi Kode Error - API Nigma - Developer API Gateway",
+      "route": "/error-codes",
+      "items": [
+        {
+          "topic": "Aturan bisnis",
+          "description": "Aturan bisnis TIDAK bisa dibaca dari tampilan. Semua aturan wajib diisi manual oleh pemilik proses.",
+          "confidence": "low",
+          "resolved": true
+        },
+        {
+          "topic": "Layout",
+          "description": "Sidebar menggunakan navigasi vertikal, area utama berisi tabel data dengan filter pencarian.",
+          "confidence": "high",
+          "resolved": true
+        },
+        {
+          "topic": "Komponen",
+          "description": "Ikon tempat sampah pada tabel diasumsikan sebagai tombol hapus.",
+          "confidence": "medium",
+          "resolved": true
+        }
+      ]
+    }
+  ]
+}

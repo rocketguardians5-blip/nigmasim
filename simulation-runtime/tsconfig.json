@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "paths": {
+      "@sim/core": ["packages/sim-core/src/index.ts"],
+      "@sim/core/*": ["packages/sim-core/src/*"]
+    },
+    "types": ["node", "vite/client"]
+  },
+  "include": [
+    "shell",
+    "apps",
+    "packages",
+    "tests",
+    "vite.config.ts",
+    "playwright.config.ts"
+  ]
+}

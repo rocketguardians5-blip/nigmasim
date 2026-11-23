@@ -1,0 +1,20 @@
+{
+  "apps": [
+    {
+      "slug": "sales-force",
+      "name": "Sales Force Automation",
+      "icon": "users",
+      "description": "Kelola pelanggan, pantau status pipeline, dan lihat ringkasan tim penjualan.",
+      "path": "/?app=sales-force",
+      "accent": "#4268ff"
+    },
+    {
+      "slug": "demo-client-api-nigma",
+      "name": "Demo Client",
+      "icon": "grid",
+      "description": "Simulasi hidup Api-Nigma — dibangun dari 2 layar rekonstruksi yang disetujui.",
+      "path": "/?app=demo-client-api-nigma",
+      "accent": "#4268ff"
+    }
+  ]
+}
