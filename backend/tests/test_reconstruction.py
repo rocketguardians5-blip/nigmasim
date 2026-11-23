@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import uuid
 
+import httpx
 import pytest
+import respx
 from fastapi.testclient import TestClient
 
 from app.db.session import SessionLocal
+from app.services.reconstructor import Analysis
+from app.models.capture import Screen
 
 
 @pytest.fixture()
@@ -374,3 +378,602 @@ def test_ai_analyze_requires_gemini_key(
     )
     assert response.status_code == 503
     assert "GEMINI_API_KEY" in response.text
+
+
+# ==================== Tes Fallback & Retry Gemini ====================
+
+import httpx
+import io
+import respx
+from PIL import Image
+from app.services.reconstructor import analyze_with_ai, Analysis
+from app.models.capture import Screen
+
+
+def _make_test_screenshot(screen_id: int) -> None:
+    """Buat dummy screenshot PNG untuk test."""
+    from app.core.config import settings
+    with SessionLocal() as db:
+        screen = db.get(Screen, screen_id)
+        if screen and screen.screenshot_path:
+            target = settings.storage_path / screen.screenshot_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if not target.exists():
+                buffer = io.BytesIO()
+                Image.new("RGB", (400, 200), (255, 255, 255)).save(buffer, format="PNG")
+                target.write_bytes(buffer.getvalue())
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_ai_analyze_success_primary_model(
+    client: TestClient, auth_headers: dict[str, str], project_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sukses di model utama tanpa retry."""
+    from app.core.config import settings
+    from app.db.session import SessionLocal
+
+    screen_id = _make_screen(project_id)
+    client.post(f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers)
+
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(settings, "gemini_model", "gemini-3.6-flash")
+    monkeypatch.setattr(settings, "gemini_fallback_models", "gemini-3.8-flash")
+    monkeypatch.setattr(settings, "gemini_allow_fallback", True)
+    monkeypatch.setattr(settings, "gemini_max_retries", 3)
+    monkeypatch.setattr(settings, "gemini_retry_base_delay", 0.01)
+
+    # Mock successful response
+    mock_response = {
+        "candidates": [{
+            "content": {
+                "parts": [{"text": '{"components": [], "assumptions": []}'}]
+            }
+        }]
+    }
+    route = respx.post("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent").mock(
+        return_value=httpx.Response(200, json=mock_response)
+    )
+
+    # Create dummy screenshot file
+    _make_test_screenshot(screen_id)
+
+    with SessionLocal() as db:
+        screen = db.get(Screen, screen_id)
+        analysis = await analyze_with_ai(screen, Analysis())
+
+    assert route.called
+    assert analysis.ai_status == "success"
+    assert analysis.ai_model == "gemini-3.6-flash"
+    assert analysis.source == "hybrid"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_ai_analyze_429_then_success_after_retry(
+    client: TestClient, auth_headers: dict[str, str], project_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """429 lalu sukses setelah retry."""
+    from app.core.config import settings
+    from app.db.session import SessionLocal
+
+    screen_id = _make_screen(project_id)
+    client.post(f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers)
+
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(settings, "gemini_model", "gemini-3.6-flash")
+    monkeypatch.setattr(settings, "gemini_fallback_models", "gemini-3.8-flash")
+    monkeypatch.setattr(settings, "gemini_allow_fallback", True)
+    monkeypatch.setattr(settings, "gemini_max_retries", 3)
+    monkeypatch.setattr(settings, "gemini_retry_base_delay", 0.01)
+
+    # Mock: first call 429, second call success
+    mock_success = {
+        "candidates": [{
+            "content": {
+                "parts": [{"text": '{"components": [], "assumptions": []}'}]
+            }
+        }]
+    }
+    route = respx.post("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent").mock(
+        side_effect=[
+            httpx.Response(429, json={"error": {"message": "Rate limit exceeded"}}),
+            httpx.Response(200, json=mock_success)
+        ]
+    )
+
+    # Create dummy screenshot file
+    _make_test_screenshot(screen_id)
+
+    with SessionLocal() as db:
+        screen = db.get(Screen, screen_id)
+        analysis = await analyze_with_ai(screen, Analysis())
+
+    assert route.call_count == 2
+    assert analysis.ai_status == "success"
+    assert analysis.ai_model == "gemini-3.6-flash"
+    assert analysis.source == "hybrid"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_ai_analyze_503_persistent_error_no_fallback(
+    client: TestClient, auth_headers: dict[str, str], project_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """503 terus-menerus -> error eksplisit tanpa fallback (fallback default OFF)."""
+    from app.core.config import settings
+    from app.db.session import SessionLocal
+
+    screen_id = _make_screen(project_id)
+    client.post(f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers)
+
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(settings, "gemini_model", "gemini-3.6-flash")
+    monkeypatch.setattr(settings, "gemini_fallback_models", "gemini-2.5-flash")
+    monkeypatch.setattr(settings, "gemini_allow_fallback", False)  # Default: OFF
+    monkeypatch.setattr(settings, "gemini_max_retries", 2)
+    monkeypatch.setattr(settings, "gemini_retry_base_delay", 0.01)
+
+    # Mock: all calls return 503
+    route = respx.post("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent").mock(
+        return_value=httpx.Response(503, json={"error": {"message": "Service unavailable"}})
+    )
+
+    # Create dummy screenshot file
+    _make_test_screenshot(screen_id)
+
+    with SessionLocal() as db:
+        screen = db.get(Screen, screen_id)
+        analysis = await analyze_with_ai(screen, Analysis())
+
+    assert route.call_count == 3  # initial + 2 retries
+    assert analysis.ai_status == "failed"
+    assert "503" in analysis.ai_error
+    assert "rate limit" in analysis.ai_error.lower() or "service unavailable" in analysis.ai_error.lower()
+    assert "GEMINI_ALLOW_FALLBACK" in analysis.ai_error
+    assert analysis.ai_model == "gemini-3.6-flash"
+    assert analysis.source == "rule-engine"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_ai_analyze_404_no_retry(
+    client: TestClient, auth_headers: dict[str, str], project_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """404 -> error tanpa retry. Gunakan model yang diizinkan tapi mock 404 dari API."""
+    from app.core.config import settings
+    from app.db.session import SessionLocal
+
+    screen_id = _make_screen(project_id)
+    client.post(f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers)
+
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(settings, "gemini_model", "gemini-3.8-flash")  # Model valid tapi mock 404
+    monkeypatch.setattr(settings, "gemini_fallback_models", "gemini-3.6-flash")
+    monkeypatch.setattr(settings, "gemini_allow_fallback", True)
+    monkeypatch.setattr(settings, "gemini_max_retries", 3)
+    monkeypatch.setattr(settings, "gemini_retry_base_delay", 0.01)
+
+    # Mock: 404 on first call
+    route = respx.post("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent").mock(
+        return_value=httpx.Response(404, json={"error": {"message": "Model not found"}})
+    )
+
+    # Create dummy screenshot file
+    _make_test_screenshot(screen_id)
+
+    with SessionLocal() as db:
+        screen = db.get(Screen, screen_id)
+        analysis = await analyze_with_ai(screen, Analysis())
+
+    assert route.call_count == 1  # No retry on 404
+    assert analysis.ai_status == "failed"
+    assert "tidak ditemukan" in analysis.ai_error.lower() or "not found" in analysis.ai_error.lower()
+    assert "gemini-3.8-flash" in analysis.ai_error
+    assert analysis.ai_model == "gemini-3.8-flash"
+    assert analysis.source == "rule-engine"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_ai_analyze_fallback_works_when_enabled(
+    client: TestClient, auth_headers: dict[str, str], project_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fallback aktif hanya bila GEMINI_ALLOW_FALLBACK=true dan GEMINI_FALLBACK_MODELS diisi."""
+    from app.core.config import settings
+    from app.db.session import SessionLocal
+
+    screen_id = _make_screen(project_id)
+    client.post(f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers)
+
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(settings, "gemini_model", "gemini-3.6-flash")
+    monkeypatch.setattr(settings, "gemini_fallback_models", "gemini-3.8-flash")  # Hanya model yang diizinkan
+    monkeypatch.setattr(settings, "gemini_allow_fallback", True)  # Fallback ENABLED
+    monkeypatch.setattr(settings, "gemini_max_retries", 1)
+    monkeypatch.setattr(settings, "gemini_retry_base_delay", 0.01)
+
+    # Mock: primary fails with 503, fallback succeeds
+    mock_success = {
+        "candidates": [{
+            "content": {
+                "parts": [{"text": '{"components": [], "assumptions": []}'}]
+            }
+        }]
+    }
+    respx.post("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent").mock(
+        return_value=httpx.Response(503, json={"error": {"message": "Service unavailable"}})
+    )
+    fallback_route = respx.post("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent").mock(
+        return_value=httpx.Response(200, json=mock_success)
+    )
+
+    # Create dummy screenshot file
+    _make_test_screenshot(screen_id)
+
+    with SessionLocal() as db:
+        screen = db.get(Screen, screen_id)
+        analysis = await analyze_with_ai(screen, Analysis())
+
+    assert analysis.ai_status == "success"
+    assert analysis.ai_model == "gemini-3.8-flash"
+    assert analysis.source == "fallback"  # Ditandai sebagai fallback
+    assert fallback_route.called
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_ai_analyze_fallback_not_used_when_disabled(
+    client: TestClient, auth_headers: dict[str, str], project_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fallback TIDAK dipakai jika GEMINI_ALLOW_FALLBACK=false (default)."""
+    from app.core.config import settings
+    from app.db.session import SessionLocal
+
+    screen_id = _make_screen(project_id)
+    client.post(f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers)
+
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(settings, "gemini_model", "gemini-3.6-flash")
+    monkeypatch.setattr(settings, "gemini_fallback_models", "gemini-2.5-flash")
+    monkeypatch.setattr(settings, "gemini_allow_fallback", False)  # Default: OFF
+    monkeypatch.setattr(settings, "gemini_max_retries", 1)
+    monkeypatch.setattr(settings, "gemini_retry_base_delay", 0.01)
+
+    # Mock: primary fails, fallback would succeed if called
+    mock_success = {
+        "candidates": [{
+            "content": {
+                "parts": [{"text": '{"components": [], "assumptions": []}'}]
+            }
+        }]
+    }
+    respx.post("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent").mock(
+        return_value=httpx.Response(503, json={"error": {"message": "Service unavailable"}})
+    )
+    fallback_route = respx.post("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent").mock(
+        return_value=httpx.Response(200, json=mock_success)
+    )
+
+    # Create dummy screenshot file
+    _make_test_screenshot(screen_id)
+
+    with SessionLocal() as db:
+        screen = db.get(Screen, screen_id)
+        analysis = await analyze_with_ai(screen, Analysis())
+
+    assert analysis.ai_status == "failed"
+    assert "GEMINI_ALLOW_FALLBACK" in analysis.ai_error
+    assert not fallback_route.called  # Fallback tidak boleh dipanggil
+
+
+# =============================================================================
+# TEST: Validasi allowlist model Gemini (hanya gemini-3.8-flash, gemini-3.6-flash)
+# =============================================================================
+
+def test_config_rejects_invalid_primary_model_startup() -> None:
+    """Startup gagal jika GEMINI_MODEL di luar daftar izin."""
+    from app.core.config import Settings
+
+    # Test dengan constructor args langsung (bypass .env)
+    with pytest.raises(ValueError, match=r"Model tidak diizinkan: gemini-2\.5-flash\. Pilihan: gemini-3\.8-flash, gemini-3\.6-flash\."):
+        Settings(
+            gemini_api_key="test-key",
+            gemini_model="gemini-2.5-flash",
+            gemini_fallback_models="",
+            gemini_allow_fallback=False,
+        )
+
+
+def test_config_rejects_invalid_fallback_model_startup() -> None:
+    """Startup gagal jika GEMINI_FALLBACK_MODELS mengandung model di luar daftar izin."""
+    from app.core.config import Settings
+
+    with pytest.raises(ValueError, match=r"Model cadangan tidak diizinkan: gemini-2\.0-flash\. Pilihan: gemini-3\.8-flash, gemini-3\.6-flash\."):
+        Settings(
+            gemini_api_key="test-key",
+            gemini_model="gemini-3.6-flash",
+            gemini_fallback_models="gemini-2.0-flash",
+            gemini_allow_fallback=True,
+        )
+
+
+def test_config_rejects_fallback_same_as_primary() -> None:
+    """Startup gagal jika model cadangan sama dengan model utama."""
+    from app.core.config import Settings
+
+    with pytest.raises(ValueError, match=r"Model cadangan \(gemini-3\.6-flash\) tidak boleh sama dengan model utama"):
+        Settings(
+            gemini_api_key="test-key",
+            gemini_model="gemini-3.6-flash",
+            gemini_fallback_models="gemini-3.6-flash",
+            gemini_allow_fallback=True,
+        )
+
+
+def test_config_accepts_valid_primary_models() -> None:
+    """Kedua model yang diizinkan diterima sebagai model utama."""
+    from app.core.config import Settings
+
+    for model in ("gemini-3.8-flash", "gemini-3.6-flash"):
+        s = Settings(
+            gemini_api_key="test-key",
+            gemini_model=model,
+            gemini_fallback_models="",
+            gemini_allow_fallback=False,
+        )
+        assert s.gemini_model == model
+
+
+def test_config_accepts_valid_fallback_model() -> None:
+    """Model cadangan valid dan berbeda dari utama diterima."""
+    from app.core.config import Settings
+
+    s = Settings(
+        gemini_api_key="test-key",
+        gemini_model="gemini-3.6-flash",
+        gemini_fallback_models="gemini-3.8-flash",
+        gemini_allow_fallback=True,
+    )
+    assert s.gemini_fallback_models == "gemini-3.8-flash"
+    assert s.gemini_model_chain == ["gemini-3.6-flash", "gemini-3.8-flash"]
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_analyze_with_ai_rejects_invalid_primary_model_runtime(
+    client: TestClient, auth_headers: dict[str, str], project_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Runtime validation: model utama di luar daftar ditolak sebelum call API."""
+    from app.db.session import SessionLocal
+    from app.services import reconstructor
+    from app.services.reconstructor import analyze_with_ai, Analysis
+
+    screen_id = _make_screen(project_id)
+    client.post(f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers)
+
+    # Patch settings di module reconstructor (bukan config) untuk bypass startup validation
+    monkeypatch.setattr(reconstructor.settings, "gemini_model", "gemini-2.5-flash")
+    monkeypatch.setattr(reconstructor.settings, "gemini_fallback_models", "")
+    monkeypatch.setattr(reconstructor.settings, "gemini_allow_fallback", False)
+    monkeypatch.setattr(reconstructor.settings, "gemini_max_retries", 0)
+
+    _make_test_screenshot(screen_id)
+
+    with SessionLocal() as db:
+        screen = db.get(Screen, screen_id)
+        analysis = await analyze_with_ai(screen, Analysis())
+
+    assert analysis.ai_status == "failed"
+    assert "Model tidak diizinkan (runtime): gemini-2.5-flash" in analysis.ai_error
+    assert analysis.ai_model == "gemini-2.5-flash"
+    assert analysis.source == "rule-engine"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_analyze_with_ai_rejects_invalid_fallback_model_runtime(
+    client: TestClient, auth_headers: dict[str, str], project_id: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Runtime validation: model cadangan di luar daftar ditolak sebelum call API."""
+    from app.db.session import SessionLocal
+    from app.services import reconstructor
+    from app.services.reconstructor import analyze_with_ai, Analysis
+
+    screen_id = _make_screen(project_id)
+    client.post(f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers)
+
+    # Primary valid, fallback invalid
+    monkeypatch.setattr(reconstructor.settings, "gemini_model", "gemini-3.6-flash")
+    monkeypatch.setattr(reconstructor.settings, "gemini_fallback_models", "gemini-2.5-flash")
+    monkeypatch.setattr(reconstructor.settings, "gemini_allow_fallback", True)
+    monkeypatch.setattr(reconstructor.settings, "gemini_max_retries", 0)
+
+    _make_test_screenshot(screen_id)
+
+    with SessionLocal() as db:
+        screen = db.get(Screen, screen_id)
+        analysis = await analyze_with_ai(screen, Analysis())
+
+    assert analysis.ai_status == "failed"
+    assert "Model cadangan tidak diizinkan (runtime): gemini-2.5-flash" in analysis.ai_error
+    assert analysis.ai_model == "gemini-3.6-flash"
+    assert analysis.source == "rule-engine"
+
+
+def test_sidebar_detection_ignores_form_fields(
+    client: TestClient, auth_headers: dict[str, str], project_id: int
+) -> None:
+    """Elemen input di x=320 (< 25% vw) tidak boleh dihitung sebagai item sidebar."""
+    screen_id = _make_screen(project_id)
+
+    response = client.post(
+        f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers
+    )
+    assert response.status_code == 201
+    draft = response.json()
+
+    assert draft["layout"]["has_sidebar"] is True
+    # 4 link di x=20 terhitung, 1 input di x=320 diabaikan
+    assert draft["layout"]["regions"]["sidebar"]["item_count"] == 4
+
+
+# ==================== Tes Usability Check ====================
+
+from app.models.reconstruction import Reconstruction, ReconstructionComponent
+from app.services.simulation_generator import (
+    USABILITY_WARNING,
+    check_reconstruction_usability,
+)
+
+
+def _usability_draft(
+    components: list[tuple[str, str, str]],
+    *,
+    sections: list[dict] | None = None,
+    tombstones: list[str] | None = None,
+) -> Reconstruction:
+    """Bangun draf in-memory: (source, component_type, label)."""
+    draft = Reconstruction(
+        screen_id=1,
+        project_id=1,
+        status="draft",
+        generated_by="rule-engine",
+        layout={
+            "sections": sections or [],
+            "tombstones": tombstones or [],
+            "overrides": {},
+        },
+    )
+    draft.components = [
+        ReconstructionComponent(
+            id=index,
+            reconstruction_id=1,
+            region="main",
+            component_type=component_type,
+            label=label,
+            props={},
+            source=source,
+        )
+        for index, (source, component_type, label) in enumerate(components, start=1)
+    ]
+    return draft
+
+
+def test_usability_check_rule_engine_only_draft_returns_zero() -> None:
+    """Draf rule-engine saja (source='detected') tidak bisa dipakai generator."""
+    draft = _usability_draft(
+        [
+            ("detected", "heading", "Dashboard Risiko"),
+            ("detected", "table", "Risiko Terakhir"),
+            ("detected", "card", "Risiko Tinggi"),
+        ]
+    )
+
+    result = check_reconstruction_usability(draft)
+
+    assert result["usable_count"] == 0
+    assert result["valid_components"] == 0
+    assert result["warning"] == USABILITY_WARNING
+    assert "belum ada komponen hasil AI Vision" in result["warning"]
+
+
+def test_usability_check_with_ai_vision_components_returns_positive() -> None:
+    """Komponen AI Vision yang lolos filter dihitung sebagai elemen usable."""
+    draft = _usability_draft(
+        [
+            ("detected", "heading", "Dashboard Risiko"),
+            ("ai-vision", "button", "Tombol Simpan"),
+            ("ai-vision", "table", "Risiko Terakhir"),
+        ]
+    )
+
+    result = check_reconstruction_usability(draft)
+
+    assert result["usable_count"] == 2
+    assert result["valid_components"] == 2
+    assert result["warning"] is None
+
+
+def test_usability_check_manual_components_counted() -> None:
+    """Komponen hasil koreksi manual (source='manual') juga dihitung usable."""
+    draft = _usability_draft(
+        [
+            ("detected", "heading", "Dashboard Risiko"),
+            ("manual", "button", "Tombol Manual"),
+        ]
+    )
+
+    result = check_reconstruction_usability(draft)
+
+    assert result["usable_count"] == 1
+    assert result["valid_components"] == 1
+    assert result["warning"] is None
+
+
+def test_usability_check_tombstoned_components_excluded() -> None:
+    """Komponen ai-vision/manual yang di-tombstone tidak dihitung."""
+    draft = _usability_draft(
+        [("ai-vision", "button", "Tombol Dihapus")],
+        tombstones=["1"],
+    )
+
+    result = check_reconstruction_usability(draft)
+
+    assert result["valid_components"] == 0
+    assert result["usable_count"] == 0
+    assert result["warning"] == USABILITY_WARNING
+
+
+def test_usability_check_ignores_components_generator_cannot_use() -> None:
+    """Label kosong/generik dan duplikat dibuang sama seperti _collect_elements()."""
+    draft = _usability_draft(
+        [
+            ("ai-vision", "button", ""),
+            ("ai-vision", "container", "container"),
+            ("ai-vision", "button", "Tombol Simpan"),
+            ("ai-vision", "button", "Tombol Simpan"),
+        ]
+    )
+
+    result = check_reconstruction_usability(draft)
+
+    assert result["usable_count"] == 1
+    assert result["warning"] is None
+
+
+def test_usability_check_endpoint_exposes_result(
+    client: TestClient, auth_headers: dict[str, str], project_id: int
+) -> None:
+    """Endpoint GET /usability mengembalikan hasil pemeriksaan yang sama."""
+    screen_id = _make_screen(project_id)
+    with SessionLocal() as db:
+        draft = Reconstruction(
+            screen_id=screen_id,
+            project_id=project_id,
+            status="draft",
+            generated_by="rule-engine",
+            layout={"sections": [], "tombstones": [], "overrides": {}},
+        )
+        db.add(draft)
+        db.flush()
+        db.add(
+            ReconstructionComponent(
+                reconstruction_id=draft.id,
+                region="main",
+                component_type="button",
+                label="Tombol Deteksi",
+                props={},
+                source="detected",
+            )
+        )
+        db.commit()
+
+    response = client.get(
+        f"/api/v1/reconstructions/screen/{screen_id}/usability", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["usable_count"] == 0
+    assert result["warning"] == USABILITY_WARNING
+
