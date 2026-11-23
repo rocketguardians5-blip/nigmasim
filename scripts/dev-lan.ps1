@@ -1,7 +1,8 @@
 <#
 .SYNOPSIS
-  Menyalakan seluruh NigmaSim (backend + capture worker + web) sebagai proses
-  terpisah yang tidak ikut mati saat jendela PowerShell ditutup.
+  Menyalakan seluruh NigmaSim (backend + capture worker + web + simulation
+  runtime) sebagai proses terpisah yang tidak ikut mati saat jendela
+  PowerShell ditutup.
 
 .DESCRIPTION
   Semua service dijalankan lewat Start-Process sehingga!
@@ -9,9 +10,10 @@
     - bisa dibuka dari perangkat lain di WiFi yang sama
     - log ditulis ke storage/logs/ agar mudah dicek
 
-  -Backend API        127.0.0.1:8000   (tidak dibuka ke jaringan)
-  -Capture Worker     127.0.0.1:8010   (WAJIB lokal - memegang sesi login)
-  -Web Admin          0.0.0.0:5173      (satu-satunya yang dibuka ke LAN)
+  -Backend API         127.0.0.1:8000   (tidak dibuka ke jaringan)
+  -Capture Worker      127.0.0.1:8010   (WAJIB lokal - memegang sesi login)
+  -Web Admin           0.0.0.0:5173     (dibuka ke LAN)
+  -Simulation Runtime  0.0.0.0:5180     (lobby simulasi hidup, dibuka ke LAN)
 
 .PARAMETER Stop
   Hentikan semua service NigmaSim lalu keluar.
@@ -85,7 +87,7 @@ Start-Process -FilePath $backendPy `
     -RedirectStandardOutput (Join-Path $logs 'backend.out.log') `
     -RedirectStandardError (Join-Path $logs 'backend.err.log') `
     -WindowStyle Hidden
-Write-Host '  [1/3] Backend API      -> 127.0.0.1:8000' -ForegroundColor Gray
+Write-Host '  [1/4] Backend API      -> 127.0.0.1:8000' -ForegroundColor Gray
 
 # 2. Capture Worker (listen di 0.0.0.0 agar bisa diakses via LAN IP)
 # Catatan: JANGAN gunakan -WindowStyle Hidden agar Chromium headed dapat tampil di layar operator
@@ -94,7 +96,7 @@ Start-Process -FilePath $workerPy `
     -WorkingDirectory (Join-Path $root 'capture-worker\src') `
     -RedirectStandardOutput (Join-Path $logs 'worker.out.log') `
     -RedirectStandardError (Join-Path $logs 'worker.err.log')
-Write-Host '  [2/3] Capture Worker   -> 127.0.0.1:8010' -ForegroundColor Gray
+Write-Host '  [2/4] Capture Worker   -> 127.0.0.1:8010' -ForegroundColor Gray
 
 # 3. Web Admin (dibuka ke jaringan)
 # Jalankan node + bin vite langsung (npm.cmd via Start-Process sering gagal diam-diam).
@@ -107,7 +109,7 @@ if ($node -and (Test-Path $viteBin)) {
         -RedirectStandardOutput (Join-Path $logs 'web.out.log') `
         -RedirectStandardError (Join-Path $logs 'web.err.log') `
         -WindowStyle Hidden
-    Write-Host '  [3/3] Web Admin        -> 0.0.0.0:5173' -ForegroundColor Gray
+    Write-Host '  [3/4] Web Admin        -> 0.0.0.0:5173' -ForegroundColor Gray
 } else {
     $npm = (Get-Command npm -ErrorAction SilentlyContinue).Source
     Start-Process -FilePath $npm `
@@ -116,10 +118,34 @@ if ($node -and (Test-Path $viteBin)) {
         -RedirectStandardOutput (Join-Path $logs 'web.out.log') `
         -RedirectStandardError (Join-Path $logs 'web.err.log') `
         -WindowStyle Hidden
-    Write-Host '  [3/3] Web Admin        -> 0.0.0.0:5173 (npm)' -ForegroundColor Gray
+    Write-Host '  [3/4] Web Admin        -> 0.0.0.0:5173 (npm)' -ForegroundColor Gray
 }
 
-# 4. (opsional) aplikasi contoh
+# 4. Simulation Runtime (lobby + simulasi hidup, origin sendiri)
+# Setara dengan `npm run dev` di simulation-runtime. Node + bin vite dipakai
+# langsung agar tidak bergantung pada npm.cmd via Start-Process.
+$runtimeDir = Join-Path $root 'simulation-runtime'
+$runtimeViteBin = Join-Path $runtimeDir 'node_modules\vite\bin\vite.js'
+if ($node -and (Test-Path $runtimeViteBin)) {
+    Start-Process -FilePath $node `
+        -ArgumentList $runtimeViteBin, '--host', '0.0.0.0', '--port', '5180' `
+        -WorkingDirectory $runtimeDir `
+        -RedirectStandardOutput (Join-Path $logs 'runtime.out.log') `
+        -RedirectStandardError (Join-Path $logs 'runtime.err.log') `
+        -WindowStyle Hidden
+    Write-Host '  [4/4] Simulation Runtime -> 0.0.0.0:5180' -ForegroundColor Gray
+} else {
+    $npm = (Get-Command npm -ErrorAction SilentlyContinue).Source
+    Start-Process -FilePath $npm `
+        -ArgumentList 'run', 'dev', '--', '--host', '0.0.0.0', '--port', '5180' `
+        -WorkingDirectory $runtimeDir `
+        -RedirectStandardOutput (Join-Path $logs 'runtime.out.log') `
+        -RedirectStandardError (Join-Path $logs 'runtime.err.log') `
+        -WindowStyle Hidden
+    Write-Host '  [4/4] Simulation Runtime -> 0.0.0.0:5180 (npm)' -ForegroundColor Gray
+}
+
+# 5. (opsional) aplikasi contoh
 if ($WithSample) {
     Start-Process -FilePath $workerPy `
         -ArgumentList '-m', 'http.server', '8099', '--bind', '127.0.0.1' `
@@ -134,7 +160,8 @@ if ($WithSample) {
 $checks = @(
     @{ name = 'Backend API'; url = 'http://127.0.0.1:8000/api/v1/health' },
     @{ name = 'Capture Worker'; url = 'http://127.0.0.1:8010/health' },
-    @{ name = 'Web Admin'; url = 'http://127.0.0.1:5173' }
+    @{ name = 'Web Admin'; url = 'http://127.0.0.1:5173' },
+    @{ name = 'Simulation Runtime'; url = 'http://127.0.0.1:5180' }
 )
 $ready = $true
 foreach ($check in $checks) {
@@ -159,6 +186,8 @@ Write-Host ''
 Write-Host '  ------------------------------------------------' -ForegroundColor DarkGray
 Write-Host "  Dari komputer ini : http://localhost:5173" -ForegroundColor Green
 Write-Host "  Dari perangkat lain (WiFi sama): http://${lanIp}:5173" -ForegroundColor Green
+Write-Host "  Simulation Runtime: http://localhost:5180" -ForegroundColor Green
+Write-Host "                      http://${lanIp}:5180" -ForegroundColor Green
 Write-Host ''
 Write-Host '  Login  : admin@nigmasim.com / Admin#12345' -ForegroundColor Yellow
 Write-Host "  Log    : $logs" -ForegroundColor DarkGray

@@ -19,7 +19,12 @@ os.environ["ADMIN_INITIAL_PASSWORD"] = "AdminTest#123"
 # Test harus selalu menolak host internal, apa pun isi .env lokal.
 os.environ["ALLOW_PRIVATE_HOSTS_IN_REGISTRY"] = "false"
 # Tes tidak boleh memanggil Gemini sungguhan (biaya/kuota + tidak deterministik).
+# Kosongkan API key agar analisis pakai mock AI vision di mode test (app_env=test).
 os.environ["GEMINI_API_KEY"] = ""
+# Gunakan model default yang valid; kosongkan fallback untuk test isolasi.
+os.environ["GEMINI_MODEL"] = "gemini-3.6-flash"
+os.environ["GEMINI_FALLBACK_MODELS"] = ""
+os.environ["GEMINI_ALLOW_FALLBACK"] = "false"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
