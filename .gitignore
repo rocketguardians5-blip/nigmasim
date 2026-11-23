@@ -52,3 +52,15 @@ desktop.ini
 .vscode/
 .idea/
 *.log
+
+# ===== Artefak lokal tambahan =====
+backend/backups/
+backend/check_*.py
+/backend/test_*.py
+storage/logs/
+simulation-runtime/.backups/
+simulation-runtime/node_modules/
+simulation-runtime/dist/
+frontend/node_modules/
+frontend/dist/
+nigmasim-backup/

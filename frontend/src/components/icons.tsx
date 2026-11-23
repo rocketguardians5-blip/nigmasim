@@ -200,7 +200,7 @@ export const IconExternal = ({ className, size }: IconProps) => (
   </svg>
 )
 
-/* ---------- Reconstruction Wizard Icons ---------- */
+/* ---------- Reconstruction Icons ---------- */
 
 export const IconBox = ({ className, size }: IconProps) => (
   <svg {...base(className, size)}>
@@ -252,7 +252,7 @@ export const IconChevronRight = ({ className, size }: IconProps) => (
   </svg>
 )
 
-/* ---------- Reconstruction Wizard Icons (Additional) ---------- */
+/* ---------- Reconstruction Icons (Additional) ---------- */
 
 export const IconMagic = ({ className, size }: IconProps) => (
   <svg {...base(className, size)}>
