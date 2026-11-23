@@ -327,17 +327,7 @@ export function SimulationPlayerPage() {
     }
   }
 
-  // Handlers for dropdown & input_data
-  const handleDropdownSelect = useCallback((hotspotId: number, value: string) => {
-    setDropdownStates(prev => ({ ...prev, [hotspotId]: value }))
-    setOpenDropdownId(null)
-  }, [])
-
-  const handleInputDataChange = useCallback((hotspotId: number, value: any) => {
-    setInputDataStates(prev => ({ ...prev, [hotspotId]: value }))
-  }, [])
-
-  const handleClickOutside = useCallback((e: MouseEvent) => {
+  const handleClickOutside = useCallback(() => {
     // Close dropdown if click outside
     setOpenDropdownId(null)
   }, [])

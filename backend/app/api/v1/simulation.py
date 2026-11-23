@@ -18,7 +18,7 @@ from app.core.errors import ConflictError, NotFoundError
 from app.db.session import get_db
 from app.models.simulation import Simulation, SimulationDataset, SimulationScreen
 from app.models.user import User
-from app.services import audit, simulation as simulation_service
+from app.services import audit, simulation as simulation_service, simulation_generator
 
 router = APIRouter(prefix="/simulation", tags=["simulation"])
 
@@ -70,6 +70,58 @@ def get_project_simulation(
 ) -> dict[str, Any]:
     sim = simulation_service.get_simulation(db, project_id)
     return simulation_service.definition(sim)
+
+
+# ------------------------------------------------------- Generator runtime (Stage 2)
+
+
+@router.post("/project/{project_id}/generate")
+def generate_project_runtime(
+    project_id: int,
+    request: Request,
+    body: dict[str, Any] | None = None,
+    actor: User = Depends(require_permission("simulation:write")),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Bangun app React hidup dari rekonstruksi yang disetujui.
+
+    Backend hanya menulis file data + index.tsx tipis ke simulation-runtime.
+    Backend TIDAK menjalankan `npm run build`; produksi perlu rebuild manual.
+    """
+    overwrite = bool((body or {}).get("overwrite", False))
+    result = simulation_generator.generate_simulation(db, project_id, overwrite=overwrite)
+
+    audit.record(
+        db,
+        actor_id=actor.id,
+        action="simulation.generate_runtime",
+        entity_type="project",
+        entity_id=project_id,
+        meta={
+            "slug": result["slug"],
+            "overwrite": overwrite,
+            "screens": len(result["screens"]),
+            "errors": len(result.get("errors") or []),
+            "skipped": len(result.get("skipped") or []),
+            "backup_dir": result.get("backup_dir"),
+        },
+        ip_address=_ip(request),
+    )
+    db.commit()
+    return result
+
+
+@router.get("/project/{project_id}/runtime")
+def get_project_runtime(
+    project_id: int,
+    _: User = Depends(require_permission("simulation:read")),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """Metadata build runtime terakhir untuk project ini (untuk reload builder)."""
+    meta = simulation_generator.read_runtime_meta(db, project_id)
+    if meta is None:
+        return {"exists": False}
+    return {"exists": True, **meta}
 
 
 @router.get("/{simulation_id}")

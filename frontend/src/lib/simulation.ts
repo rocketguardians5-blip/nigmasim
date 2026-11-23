@@ -69,7 +69,76 @@ export interface HotspotTargetMap {
   }
 }
 
+/* ---------------- Generator runtime (Stage 2) ---------------- */
+
+export interface GeneratedScreenInfo {
+  key: string
+  title: string
+  route: string
+  kind: string
+}
+
+export interface RuntimeScreenError {
+  screen_key: string | null
+  screen_title: string | null
+  reason: string
+}
+
+export interface RuntimeSkippedScreen {
+  screen_key: string
+  screen_title: string
+  screen_id: number
+  capture_version: number
+  reason: string
+}
+
+export interface RuntimeAssumptionItem {
+  topic: string
+  description: string
+  confidence: string
+  resolved: boolean
+}
+
+export interface RuntimeAssumptionGroup {
+  screen_title: string
+  route: string
+  items: RuntimeAssumptionItem[]
+}
+
+export interface GenerateSimulationResult {
+  slug: string
+  name: string
+  assumptions: RuntimeAssumptionGroup[]
+  screens: GeneratedScreenInfo[]
+  errors: RuntimeScreenError[]
+  skipped: RuntimeSkippedScreen[]
+  runtime_path: string
+  runtime_dir: string
+  backup_dir: string | null
+  generated_at: string
+}
+
+export interface ProjectRuntimeInfo {
+  exists: boolean
+  slug?: string
+  name?: string
+  description?: string
+  project_id?: number
+  application_id?: number
+  application_name?: string
+  generated_at?: string
+  runtime_path?: string
+  screens?: GeneratedScreenInfo[]
+  errors?: RuntimeScreenError[]
+  skipped?: RuntimeSkippedScreen[]
+  assumptions?: RuntimeAssumptionGroup[]
+}
+
 export const simulationApi = {
+  generate: (projectId: number, body: { overwrite?: boolean } = {}) =>
+    api.post<GenerateSimulationResult>(`/simulation/project/${projectId}/generate`, body),
+  runtime: (projectId: number) =>
+    api.get<ProjectRuntimeInfo>(`/simulation/project/${projectId}/runtime`),
   build: (
     projectId: number,
     body: {
