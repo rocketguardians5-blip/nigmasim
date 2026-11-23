@@ -249,10 +249,12 @@ export function Alert({
   tone = 'info',
   title,
   children,
+  className,
 }: {
   tone?: 'info' | 'warning' | 'danger' | 'success'
   title?: string
   children?: ReactNode
+  className?: string
 }) {
   const styles = {
     info: 'border-brand-200 bg-brand-50 text-brand-800',
@@ -264,7 +266,7 @@ export function Alert({
   const Icon = tone === 'warning' ? IconWarning : IconInfo
 
   return (
-    <div className={cn('flex gap-2.5 rounded border px-3 py-2.5', styles)}>
+    <div className={cn('flex gap-2.5 rounded border px-3 py-2.5', styles, className)}>
       <Icon size={16} className="mt-0.5 shrink-0" />
       <div className="min-w-0">
         {title && <p className="text-[13px] font-medium">{title}</p>}

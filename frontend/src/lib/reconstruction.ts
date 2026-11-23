@@ -41,6 +41,7 @@ export interface Reconstruction {
     ai_status?: string
     ai_model?: string
     ai_error?: string
+    ai_source?: 'hybrid' | 'fallback' | 'rule-engine'
   } | null
   code_text: string | null
   generated_by: string
@@ -71,6 +72,14 @@ export interface AIAnalyzeResponse {
   assumptions_added: number
   layout_updated: boolean
   message: string
+}
+
+export interface UsabilityCheckResult {
+  usable_count: number
+  valid_components: number
+  section_items: number
+  sections_count: number
+  warning: string | null
 }
 
 export const reconstructionApi = {
@@ -114,4 +123,6 @@ export const reconstructionApi = {
     api.get<HotspotStateOut>(`/reconstructions/screen/${screenId}/hotspot-state`),
   updateHotspotState: (screenId: number, state: HotspotStateIn) =>
     api.put<HotspotStateOut>(`/reconstructions/screen/${screenId}/hotspot-state`, state),
+  checkUsability: (screenId: number) =>
+    api.get<UsabilityCheckResult>(`/reconstructions/screen/${screenId}/usability`),
 }

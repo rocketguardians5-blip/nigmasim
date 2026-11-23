@@ -39,6 +39,7 @@ from app.services.simulation import (
     normalize_box_to_percent,
     sync_simulation_hotspots_for_screen,
 )
+from app.services.simulation_generator import check_reconstruction_usability
 from app.schemas.reconstruction import AIAnalyzeRequest, AIAnalyzeResponse
 
 router = APIRouter(prefix="/reconstructions", tags=["reconstruction"])
@@ -232,6 +233,20 @@ def get_screen_reconstruction(
     db: Session = Depends(get_db),
 ) -> ReconstructionDetail:
     return _load(_get_draft(db, screen_id))
+
+
+@router.get("/screen/{screen_id}/usability", response_model=dict)
+def check_usability(
+    screen_id: int,
+    _: User = Depends(require_permission("screens:read")),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Cek apakah draf rekonstruksi bisa dipakai Simulation Generator.
+
+    Mengembalikan usable_count dan warning bila 0.
+    """
+    draft = _get_draft(db, screen_id)
+    return check_reconstruction_usability(draft)
 
 
 @router.patch("/screen/{screen_id}/code", response_model=ReconstructionDetail)

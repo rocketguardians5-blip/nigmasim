@@ -4,7 +4,7 @@ import type { Application, Project } from '../lib/api'
 import { screensApi } from '../lib/capture'
 import type { Screen } from '../lib/capture'
 import { reconstructionApi } from '../lib/reconstruction'
-import type { Reconstruction, ReconstructionComponent } from '../lib/reconstruction'
+import type { Reconstruction, ReconstructionComponent, UsabilityCheckResult } from '../lib/reconstruction'
 import { useAuth } from '../lib/auth'
 import {
   Alert,
@@ -24,6 +24,9 @@ const CONFIDENCE_TONE: Record<string, 'neutral' | 'success' | 'warning' | 'dange
   medium: 'warning',
   low: 'danger',
 }
+
+const USABILITY_WARNING_FALLBACK =
+  'Draf ini belum bisa dipakai Simulation Builder: belum ada komponen hasil AI Vision atau koreksi manual. Jalankan AI Vision.'
 
 function convertComponentsToHotspots(draft: Reconstruction): HotspotBox[] {
   const boxes: HotspotBox[] = []
@@ -85,6 +88,9 @@ export function UIReconstructionPage() {
   const [analyzing, setAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [usability, setUsability] = useState<UsabilityCheckResult | null>(null)
+  const [showApproveConfirm, setShowApproveConfirm] = useState(false)
+  const [pendingApproveStatus, setPendingApproveStatus] = useState<'approved' | 'in_review' | 'rejected' | null>(null)
   
   // Hotspot editor state
   const [hotspots, setHotspots] = useState<HotspotBox[]>([])
@@ -99,10 +105,19 @@ export function UIReconstructionPage() {
       // Convert reconstruction components to hotspot boxes
       const boxes = convertComponentsToHotspots(result)
       setHotspots(boxes)
+
+      // Check usability for generator
+      try {
+        const usabilityResult = await reconstructionApi.checkUsability(id)
+        setUsability(usabilityResult)
+      } catch {
+        setUsability(null)
+      }
     } catch {
       setDraft(null)
       setCode('')
       setHotspots([])
+      setUsability(null)
     }
   }, [])
 
@@ -264,6 +279,14 @@ export function UIReconstructionPage() {
 
   const handleReview = useCallback(async (status: 'in_review' | 'approved' | 'rejected') => {
     if (!screenId || !draft) return
+
+    // If approving and usability is 0, show confirmation dialog
+    if (status === 'approved' && usability && usability.usable_count === 0) {
+      setPendingApproveStatus(status)
+      setShowApproveConfirm(true)
+      return
+    }
+
     try {
       await reconstructionApi.review(screenId, status)
       const updated = await reconstructionApi.get(screenId)
@@ -272,7 +295,22 @@ export function UIReconstructionPage() {
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Review gagal')
     }
-  }, [screenId, draft])
+  }, [screenId, draft, usability])
+
+  const handleConfirmApprove = useCallback(async () => {
+    if (!screenId || !draft || !pendingApproveStatus) return
+    try {
+      await reconstructionApi.review(screenId, pendingApproveStatus)
+      const updated = await reconstructionApi.get(screenId)
+      setDraft(updated)
+      setNotice(`Draf di${pendingApproveStatus === 'approved' ? 'setujui' : pendingApproveStatus === 'rejected' ? 'tolak' : 'minta review'}`)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Review gagal')
+    } finally {
+      setShowApproveConfirm(false)
+      setPendingApproveStatus(null)
+    }
+  }, [screenId, draft, pendingApproveStatus])
 
   if (!appId) {
     return (
@@ -391,19 +429,48 @@ export function UIReconstructionPage() {
             <Badge tone={unresolved > 0 ? 'danger' : 'success'}>
               {unresolved > 0 ? `${unresolved} asumsi belum dicek` : 'Semua asumsi sudah dicek'}
             </Badge>
+            {/* Generator Usability Warning */}
+            {usability && usability.usable_count === 0 && (
+              <Badge tone="warning">
+                <span className="flex items-center gap-1">
+                  <IconWarning size={10} />
+                  Belum usable generator: {usability.valid_components} komponen AI Vision/manual
+                </span>
+              </Badge>
+            )}
+            {usability && usability.usable_count > 0 && (
+              <Badge tone="success">
+                <span className="flex items-center gap-1">
+                  <IconInfo size={10} />
+                  Generator: {usability.usable_count} elemen usable
+                </span>
+              </Badge>
+            )}
             <span className="text-xs text-slate-500">
               dibuat oleh {draft.generated_by} · {new Date(draft.created_at).toLocaleString('id-ID')}
             </span>
             
-            {/* AI Status */}
+            {/* AI Status & Model Badge */}
             {draft.layout?.ai_status && (
               <>
                 {draft.layout.ai_status === 'success' && (
-                  <Badge tone="success">
-                    <span className="flex items-center gap-1">
-                      <IconInfo size={10} /> AI Vision aktif ({draft.layout.ai_model || 'Gemini'})
-                    </span>
-                  </Badge>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge tone="success">
+                      <span className="flex items-center gap-1">
+                        <IconInfo size={10} /> AI Vision aktif
+                      </span>
+                    </Badge>
+                    <Badge tone="neutral">
+                      {draft.layout.ai_model || 'Gemini'}
+                    </Badge>
+                    {draft.layout.ai_source === 'fallback' && (
+                      <Badge tone="warning">
+                        <span className="flex items-center gap-1">
+                          <IconWarning size={10} /> Dianalisis dengan model cadangan
+                        </span>
+                      </Badge>
+                    )}
+                  </div>
                 )}
                 {draft.layout.ai_status === 'failed' && (
                   <Badge tone="danger">
@@ -437,6 +504,17 @@ export function UIReconstructionPage() {
               </div>
             )}
           </div>
+
+          {usability && usability.usable_count === 0 && (
+            <Alert
+              tone="warning"
+              title={usability.warning ?? USABILITY_WARNING_FALLBACK}
+            >
+              Generator hanya menerima komponen hasil AI Vision (<code>ai-vision</code>) atau
+              koreksi manual (<code>manual</code>) yang valid. Jalankan AI Vision atau tambah
+              hotspot manual sebelum memakai draf ini.
+            </Alert>
+          )}
 
           {/* Perbandingan: asli vs Draf struktur (editor kotak) */}
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -589,6 +667,55 @@ export function UIReconstructionPage() {
               </div>
             </div>
           </Card>
+        </div>
+      )}
+
+      {/* Confirmation Dialog for Approving Unusable Draft */}
+      {showApproveConfirm && usability && usability.usable_count === 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md bg-white rounded-xl shadow-xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 rounded-full bg-amber-100 text-amber-600">
+                <IconWarning size={24} />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900">Peringatan: Draf Tidak Usable Generator</h3>
+            </div>
+            <p className="text-slate-600 mb-4">
+              {usability.warning ?? USABILITY_WARNING_FALLBACK}
+            </p>
+            <p className="text-slate-600 mb-4">
+              Draf ini memiliki <strong>0 elemen usable</strong> oleh Simulation Generator.
+              Generator hanya menerima komponen hasil AI Vision (<code>ai-vision</code>) atau koreksi manual
+              (<code>manual</code>) yang valid.
+            </p>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-sm text-amber-800">
+              <p className="font-medium mb-1">Detail:</p>
+              <ul className="space-y-1 ml-4 list-disc">
+                <li>Komponen valid (ai-vision/manual): <strong>{usability.valid_components}</strong></li>
+                <li>Item section layout: <strong>{usability.section_items}</strong></li>
+                <li>Jumlah section: <strong>{usability.sections_count}</strong></li>
+              </ul>
+            </div>
+            <p className="text-slate-600 text-sm mb-6">
+              Jika Anda tetap menyetujui, Simulation Builder akan gagal generate untuk layar ini dengan pesan:
+              <br />
+              <code className="text-xs bg-slate-100 px-1.5 py-0.5 rounded">
+                "Rekonstruksi tidak punya komponen atau section yang bisa dipakai"
+              </code>
+            </p>
+            <p className="text-slate-600 text-sm mb-6">
+              <strong>Saran:</strong> Jalankan <strong>AI Vision</strong> untuk menghasilkan komponen ai-vision,
+              atau tambah komponen manual via editor kotak, sebelum menyetujui.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => { setShowApproveConfirm(false); setPendingApproveStatus(null); }}>
+                Batal
+              </Button>
+              <Button variant="danger" onClick={handleConfirmApprove}>
+                Tetap Setujui
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>
