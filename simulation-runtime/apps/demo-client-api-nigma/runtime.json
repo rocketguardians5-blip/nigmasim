@@ -1,13 +1,19 @@
 {
   "slug": "demo-client-api-nigma",
   "name": "Demo Client",
-  "description": "Simulasi hidup Api-Nigma — dibangun dari 2 layar rekonstruksi yang disetujui.",
+  "description": "Simulasi hidup Api-Nigma — dibangun dari 3 layar rekonstruksi yang disetujui.",
   "project_id": 2,
   "application_id": 2,
   "application_name": "Api-Nigma",
-  "generated_at": "2026-11-23T03:40:02Z",
+  "generated_at": "2026-11-23T05:26:00Z",
   "runtime_path": "/?app=demo-client-api-nigma",
   "screens": [
+    {
+      "key": "login",
+      "title": "API Nigma Portal",
+      "route": "/login",
+      "kind": "auth"
+    },
     {
       "key": "dashboard",
       "title": "Dashboard Overview - API Nigma Portal - Developer API Gateway",
@@ -22,11 +28,6 @@
     }
   ],
   "errors": [
-    {
-      "screen_key": "masuk-ke-portal---api-nigma",
-      "screen_title": "Masuk ke Portal - API Nigma",
-      "reason": "Rekonstruksi tidak punya komponen atau section yang bisa dipakai."
-    },
     {
       "screen_key": "api-playground---interactive-http-client---developer-api-gat",
       "screen_title": "API Playground - Interactive HTTP Client - Developer API Gateway",
@@ -50,6 +51,36 @@
     }
   ],
   "assumptions": [
+    {
+      "screen_title": "API Nigma Portal",
+      "route": "/login",
+      "items": [
+        {
+          "topic": "Aturan bisnis",
+          "description": "Aturan bisnis TIDAK bisa dibaca dari tampilan. Semua aturan wajib diisi manual oleh pemilik proses.",
+          "confidence": "low",
+          "resolved": true
+        },
+        {
+          "topic": "Layout",
+          "description": "Halaman login terpusat (single-card layout) dengan latar belakang bernuansa terang dan lembut.",
+          "confidence": "high",
+          "resolved": true
+        },
+        {
+          "topic": "Komponen",
+          "description": "Tersedia tombol auto-fill demo untuk mempercepat pengisian akun pengujian default.",
+          "confidence": "high",
+          "resolved": true
+        },
+        {
+          "topic": "Aturan bisnis",
+          "description": "Kredensial bawaan admin@nigma.id / password dapat digunakan untuk login ke portal.",
+          "confidence": "high",
+          "resolved": true
+        }
+      ]
+    },
     {
       "screen_title": "Dashboard Overview - API Nigma Portal - Developer API Gateway",
       "route": "/dashboard",

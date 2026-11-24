@@ -18,6 +18,7 @@ import {
 } from '../components/ui'
 import { IconWarning, IconInfo, IconMagic } from '../components/icons'
 import { HotspotEditor, type HotspotBox } from '../components/HotspotEditor'
+import { AIResultPanel } from '../components/AIResultPanel'
 
 const CONFIDENCE_TONE: Record<string, 'neutral' | 'success' | 'warning' | 'danger'> = {
   high: 'success',
@@ -30,8 +31,17 @@ const USABILITY_WARNING_FALLBACK =
 
 function convertComponentsToHotspots(draft: Reconstruction): HotspotBox[] {
   const boxes: HotspotBox[] = []
-  
+  const tombstones = new Set((draft.layout?.tombstones ?? []).map((value) => String(value)))
+
   for (const component of draft.components ?? []) {
+    const rawId = String(component.id)
+    if (
+      tombstones.has(rawId)
+      || tombstones.has(`auto_${rawId}`)
+      || tombstones.has(`manual_${rawId}`)
+    ) {
+      continue
+    }
     const props = component.props || {}
     const box = props.box
     
@@ -96,7 +106,7 @@ export function UIReconstructionPage() {
   const [hotspots, setHotspots] = useState<HotspotBox[]>([])
   const [isEditorOpen, setIsEditorOpen] = useState(false)
 
-  const loadDraft = useCallback(async (id: number) => {
+  const loadDraft = useCallback(async (id: number): Promise<Reconstruction | null> => {
     try {
       const result = await reconstructionApi.get(id)
       setDraft(result)
@@ -113,11 +123,22 @@ export function UIReconstructionPage() {
       } catch {
         setUsability(null)
       }
-    } catch {
-      setDraft(null)
-      setCode('')
-      setHotspots([])
-      setUsability(null)
+      return result
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        setDraft(null)
+        setCode('')
+        setHotspots([])
+        setUsability(null)
+        return null
+      }
+
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : 'Gagal memuat draf rekonstruksi. Periksa koneksi lalu coba lagi.',
+      )
+      return null
     }
   }, [])
 
@@ -132,17 +153,35 @@ export function UIReconstructionPage() {
           if (!isNaN(componentId)) {
             const existingComponent = draft.components.find(c => c.id === componentId)
             if (existingComponent) {
-              // Only update if position changed
               const props = existingComponent.props || {}
               const oldBox = props.box
-              if (oldBox && (oldBox.x !== box.x || oldBox.y !== box.y || oldBox.w !== box.w || oldBox.h !== box.h)) {
+              const currentAction = typeof props.action === 'string' ? props.action : ''
+              const nextBox = { x: box.x, y: box.y, w: box.w, h: box.h }
+              const changed = (
+                !oldBox
+                || oldBox.x !== box.x
+                || oldBox.y !== box.y
+                || oldBox.w !== box.w
+                || oldBox.h !== box.h
+                || existingComponent.label !== box.label
+                || currentAction !== (box.action ?? '')
+                || (box.component_type !== undefined
+                  && existingComponent.component_type !== box.component_type)
+              )
+
+              if (changed) {
                 await reconstructionApi.updateComponent(componentId, {
-                  label: existingComponent.label,
+                  label: box.label ?? existingComponent.label,
                   notes: existingComponent.notes,
                   region: existingComponent.region,
-                  component_type: existingComponent.component_type,
-                  element_type: existingComponent.element_type,
+                  component_type: box.component_type ?? existingComponent.component_type,
+                  element_type: box.element_type ?? existingComponent.element_type,
                   config_json: existingComponent.config_json,
+                  props: {
+                    ...props,
+                    box: nextBox,
+                    action: box.action ?? currentAction,
+                  },
                 })
               }
             }
@@ -166,7 +205,52 @@ export function UIReconstructionPage() {
       // Refresh draft to get updated components
       await loadDraft(screenId)
     } catch (err) {
-      console.error('Failed to save hotspots:', err)
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : 'Gagal menyimpan perubahan hotspot ke server.',
+      )
+    }
+  }, [screenId, draft, loadDraft])
+
+  const handleDeleteBoxes = useCallback(async (ids: string[]) => {
+    if (!screenId || !draft || ids.length === 0) return
+
+    try {
+      const autoTombstones: string[] = []
+      for (const id of ids) {
+        if (!id.startsWith('comp-')) continue
+        const componentId = Number(id.replace('comp-', ''))
+        if (!Number.isFinite(componentId)) continue
+        const component = draft.components.find((item) => item.id === componentId)
+        if (!component) continue
+
+        if (component.source === 'manual' || component.region === 'manual') {
+          await reconstructionApi.deleteComponent(componentId)
+        } else {
+          autoTombstones.push(String(componentId))
+        }
+      }
+
+      if (autoTombstones.length > 0) {
+        const deleted = Array.from(new Set([
+          ...(draft.layout?.tombstones ?? []).map((value) => String(value)),
+          ...autoTombstones,
+        ]))
+        await reconstructionApi.updateHotspotState(screenId, {
+          deleted,
+          overrides: draft.layout?.overrides ?? {},
+        })
+      }
+
+      await loadDraft(screenId)
+      setNotice('Hotspot yang dihapus berhasil disimpan')
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : 'Gagal menyimpan penghapusan hotspot ke server.',
+      )
     }
   }, [screenId, draft, loadDraft])
 
@@ -266,12 +350,25 @@ export function UIReconstructionPage() {
     if (!screenId) return
     setAnalyzing(true)
     setError(null)
+    setNotice(null)
     try {
-      await reconstructionApi.aiAnalyze(screenId, true)
-      await loadDraft(screenId)
-      setNotice('AI vision selesai — draf diperbarui')
+      const response = await reconstructionApi.aiAnalyze(screenId, true)
+      const updated = await loadDraft(screenId)
+      if (
+        response.status === 'success'
+        && updated?.layout?.ai_status === 'success'
+      ) {
+        setNotice('AI Vision selesai — draf diperbarui')
+      } else {
+        setError(
+          response.error
+          || updated?.layout?.ai_error
+          || response.message
+          || 'AI Vision gagal.',
+        )
+      }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'AI vision gagal')
+      setError(err instanceof ApiError ? err.message : 'AI Vision gagal')
     } finally {
       setAnalyzing(false)
     }
@@ -319,7 +416,8 @@ export function UIReconstructionPage() {
   }
 
   const unresolved = draft?.assumptions?.filter((a) => !a.resolved).length ?? 0
-  const canReview = can('reconstruction.review')
+  const canWrite = can('screens:write')
+  const canReview = can('screens:review')
 
   return (
     <div className="space-y-6">
@@ -395,7 +493,7 @@ export function UIReconstructionPage() {
             <Button
               size="sm"
               variant={analyzing ? 'secondary' : 'primary'}
-              disabled={analyzing || !screenId}
+              disabled={analyzing || !screenId || !canWrite}
               onClick={handleAnalyze}
             >
               <Spinner className={analyzing ? 'h-3.5 w-3.5 mr-1' : 'hidden'} />
@@ -404,7 +502,7 @@ export function UIReconstructionPage() {
             <Button
               size="sm"
               variant="secondary"
-              disabled={analyzing || !screenId}
+              disabled={analyzing || !screenId || !canWrite}
               onClick={handleAIAnalyze}
             >
               <IconMagic size={14} className="mr-1" />
@@ -415,7 +513,15 @@ export function UIReconstructionPage() {
       </Card>
 
       {screenId && !draft && (
-        <EmptyState title="Belum ada draf" description="Klik 'Analisis & buat draf' untuk memulai." />
+        <div className="space-y-6">
+          <EmptyState title="Belum ada draf" description="Klik 'Analisis & buat draf' untuk memulai." />
+          <AIResultPanel
+            draft={draft}
+            analyzing={analyzing}
+            canRunAI={canWrite}
+            onRunAI={() => void handleAIAnalyze()}
+          />
+        </div>
       )}
 
       {draft && (
@@ -434,7 +540,7 @@ export function UIReconstructionPage() {
               <Badge tone="warning">
                 <span className="flex items-center gap-1">
                   <IconWarning size={10} />
-                  Belum usable generator: {usability.valid_components} komponen AI Vision/manual
+                  Usable AI/manual: {usability.valid_components} komponen
                 </span>
               </Badge>
             )}
@@ -442,7 +548,7 @@ export function UIReconstructionPage() {
               <Badge tone="success">
                 <span className="flex items-center gap-1">
                   <IconInfo size={10} />
-                  Generator: {usability.usable_count} elemen usable
+                  AI/manual usable: {usability.usable_count} elemen
                 </span>
               </Badge>
             )}
@@ -505,14 +611,23 @@ export function UIReconstructionPage() {
             )}
           </div>
 
+          <AIResultPanel
+            draft={draft}
+            analyzing={analyzing}
+            canRunAI={canWrite}
+            onRunAI={() => void handleAIAnalyze()}
+          />
+
           {usability && usability.usable_count === 0 && (
             <Alert
               tone="warning"
               title={usability.warning ?? USABILITY_WARNING_FALLBACK}
             >
-              Generator hanya menerima komponen hasil AI Vision (<code>ai-vision</code>) atau
-              koreksi manual (<code>manual</code>) yang valid. Jalankan AI Vision atau tambah
-              hotspot manual sebelum memakai draf ini.
+              Pemeriksaan usability di atas hanya menghitung komponen AI Vision
+              (<code>ai-vision</code>) dan koreksi manual (<code>manual</code>) yang valid.
+              Generator sendiri juga dapat memakai sumber lain yang lolos filter, termasuk item
+              section layout. Jalankan AI Vision atau tambah hotspot manual agar jumlah komponen
+              AI/manual yang dapat digunakan bertambah.
             </Alert>
           )}
 
@@ -558,7 +673,9 @@ export function UIReconstructionPage() {
                       <button
                         type="button"
                         onClick={() => setIsEditorOpen(true)}
-                        className="h-10 px-5 rounded-lg bg-brand-500 text-white font-medium text-sm hover:bg-brand-600 transition-colors"
+                        disabled={!canWrite}
+                        title={canWrite ? undefined : 'Anda tidak memiliki izin screens:write'}
+                        className="h-10 px-5 rounded-lg bg-brand-500 text-white font-medium text-sm hover:bg-brand-600 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Buka Editor Layar Penuh
                       </button>
@@ -571,6 +688,7 @@ export function UIReconstructionPage() {
                       boxes={hotspots}
                       saving={false}
                       onChange={handleHotspotsChange}
+                      onDeleteBoxes={(ids) => void handleDeleteBoxes(ids)}
                       onClose={() => setIsEditorOpen(false)}
                       onSaveManual={undefined}
                     />
@@ -620,6 +738,7 @@ export function UIReconstructionPage() {
                       <Button
                         size="sm"
                         variant="outline-primary"
+                        disabled={!canWrite}
                         onClick={() => void reconstructionApi.resolve(a.id).then(() => void loadDraft(screenId!))}
                       >
                         Tandai dicek
@@ -637,6 +756,7 @@ export function UIReconstructionPage() {
               <textarea
                 className="w-full h-[400px] font-mono text-sm p-3 border border-slate-300 rounded bg-slate-50 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
                 value={code}
+                readOnly={!canWrite}
                 onChange={(e) => setCode(e.target.value)}
                 spellCheck={false}
               />
@@ -650,7 +770,8 @@ export function UIReconstructionPage() {
                 </Button>
                 <Button
                   size="sm"
-                  disabled={code === draft.code_text}
+                  disabled={!canWrite || code === draft.code_text}
+                  title={canWrite ? undefined : 'Anda tidak memiliki izin screens:write'}
                   onClick={async () => {
                     try {
                       await reconstructionApi.updateCode(draft.screen_id, code)
@@ -685,8 +806,10 @@ export function UIReconstructionPage() {
             </p>
             <p className="text-slate-600 mb-4">
               Draf ini memiliki <strong>0 elemen usable</strong> oleh Simulation Generator.
-              Generator hanya menerima komponen hasil AI Vision (<code>ai-vision</code>) atau koreksi manual
-              (<code>manual</code>) yang valid.
+              Pemeriksaan <code>usable_count</code> hanya menghitung komponen AI Vision
+              (<code>ai-vision</code>) dan koreksi manual (<code>manual</code>) yang valid. Filter
+              generator sebenarnya juga dapat memproses sumber valid lain, termasuk item section
+              layout.
             </p>
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 text-sm text-amber-800">
               <p className="font-medium mb-1">Detail:</p>
@@ -697,7 +820,8 @@ export function UIReconstructionPage() {
               </ul>
             </div>
             <p className="text-slate-600 text-sm mb-6">
-              Jika Anda tetap menyetujui, Simulation Builder akan gagal generate untuk layar ini dengan pesan:
+              Jika draf ini ternyata tidak punya komponen atau section yang bisa dipakai,
+              Simulation Builder akan gagal generate untuk layar ini dengan pesan:
               <br />
               <code className="text-xs bg-slate-100 px-1.5 py-0.5 rounded">
                 "Rekonstruksi tidak punya komponen atau section yang bisa dipakai"

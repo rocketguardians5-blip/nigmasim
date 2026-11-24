@@ -33,6 +33,13 @@ export interface SimField {
   options?: SimOption[]
   /** Key field induk untuk dropdown bertingkat. */
   dependsOn?: string
+  /**
+   * Tombol mata (lihat/sembunyikan) di dalam field.
+   * - `true`  : tombol selalu tampil.
+   * - `false` : tombol dimatikan walaupun field-nya bertipe password.
+   * - tidak diisi: otomatis untuk field bertipe `password`.
+   */
+  toggleVisibility?: boolean
 }
 
 export interface SimColumn {
@@ -77,6 +84,13 @@ export interface SimPrefill {
   values: Record<string, string | boolean>
 }
 
+/** Slot tautan di kanan baris checkbox (mis. "Lupa Password?"). */
+export interface SimLinkRight {
+  label: string
+  /** Teks aksi yang disimulasikan saat tautan diklik. */
+  action?: string
+}
+
 export type SimSection =
   | { type: 'stats'; title?: string; items: SimStat[] }
   | { type: 'text'; title?: string; body: string }
@@ -91,6 +105,8 @@ export type SimSection =
       navigateTo?: string
       prefill?: SimPrefill
       dataset?: string
+      /** Tautan opsional di kanan baris checkbox. */
+      linkRight?: SimLinkRight
     }
   | {
       type: 'table'

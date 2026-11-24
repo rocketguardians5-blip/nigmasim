@@ -64,3 +64,14 @@ simulation-runtime/dist/
 frontend/node_modules/
 frontend/dist/
 nigmasim-backup/
+
+# Scratch dan script audit ad-hoc
+/scripts/*.py
+/scripts/ocr.ps1
+!/scripts/dev-lan.ps1
+/list_tables.py
+/query_db.py
+/analysis_summary.md
+/test_screenshot.png
+/storage/*.png
+/storage/verification_debug/

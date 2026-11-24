@@ -15,11 +15,14 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import copy
 import json
 import logging
+import math
 import re
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -38,6 +41,63 @@ logger = logging.getLogger("nigmasim.reconstructor")
 
 SIDEBAR_BAND = 0.22  # elemen di kiri 22% lebar -> kandidat navigasi
 HEADER_BAND = 0.14  # elemen di atas 14% tinggi -> kandidat header
+AI_RESULT_MAX_BYTES = 200 * 1024
+AI_RESULT_ALLOWED_TOP_LEVEL_KEYS = frozenset({"components", "assumptions", "layout"})
+_AI_RESULT_SENSITIVE_KEYS = frozenset(
+    {
+        "apikey",
+        "xapikey",
+        "xgoogapikey",
+        "geminikey",
+        "geminiapikey",
+        "authorization",
+        "proxyauthorization",
+        "accesstoken",
+        "refreshtoken",
+        "idtoken",
+        "bearer",
+        "cookie",
+        "setcookie",
+        "credential",
+        "credentials",
+        "secret",
+        "clientsecret",
+        "privatekey",
+        "password",
+        "passwd",
+        "sessionid",
+        "sessiontoken",
+    }
+)
+_AI_RESULT_BINARY_OR_REQUEST_KEYS = frozenset(
+    {
+        "request",
+        "requestpayload",
+        "payload",
+        "requestheaders",
+        "header",
+        "headers",
+        "httpheader",
+        "httpheaders",
+        "httpsheader",
+        "httpsheaders",
+        "requestheader",
+        "responseheader",
+        "responseheaders",
+        "contents",
+        "parts",
+        "systeminstruction",
+        "inlinedata",
+        "screenshot",
+        "screenshotdata",
+        "image",
+        "thumbnail",
+        "thumbnaildata",
+        "base64",
+        "imagebytes",
+        "binarydata",
+    }
+)
 
 
 @dataclass
@@ -48,7 +108,30 @@ class Analysis:
     ai_model: str = ""  # model vision yang benar-benar dipakai (bila ada)
     ai_status: str = "not_configured"  # "not_configured" | "success" | "failed"
     ai_error: str = ""  # alasan gagal jika ada
-    source: str = "rule-engine"  # "rule-engine" | "ai-vision" | "hybrid"
+    ai_result: dict[str, Any] | None = None
+    ai_result_truncated: bool = False
+    ai_result_size_bytes: int = 0
+    ai_analyzed_at: str = ""
+    source: str = "rule-engine"  # "rule-engine" | "ai-vision" | "hybrid" | "fallback"
+
+
+def _mark_ai_failure(analysis: Analysis, message: str) -> None:
+    """Catat kegagalan AI tanpa menyimpan hasil parsial/lama."""
+    analysis.ai_status = "failed"
+    analysis.ai_error = _redact_sensitive_text(message)
+    analysis.ai_result = None
+    analysis.ai_result_truncated = False
+    analysis.ai_result_size_bytes = 0
+    analysis.ai_analyzed_at = datetime.now(timezone.utc).isoformat()
+    analysis.source = "rule-engine"
+
+
+def _generated_by_for_source(source: str) -> str:
+    return {
+        "ai-vision": "ai-vision",
+        "hybrid": "hybrid",
+        "fallback": "fallback",
+    }.get(source, "rule-engine")
 
 
 def _slug(text: str) -> str:
@@ -355,6 +438,341 @@ def _component_box_iou(b1: dict | None, b2: dict | None) -> float:
         return 0.0
 
 
+def _json_size_bytes(value: Any) -> int:
+    """Hitung ukuran JSON sesuai serializer JSON bawaan SQLAlchemy/SQLite.
+
+    ``json.dumps`` bawaan memakai ``ensure_ascii=True`` dan separator dengan
+    spasi. SQLite menyimpan JSON dengan serializer yang sama, sehingga unicode
+    seperti ``é`` dihitung sebagai enam byte (``\\u00e9``), bukan dua byte UTF-8.
+    Mengukur dengan format yang sama mencegah payload Unicode lolos dari
+    batas 200 KB hanya karena hasil hitungan backend terlalu kecil.
+    """
+    serialized = json.dumps(
+        value,
+        ensure_ascii=True,
+        separators=(", ", ": "),
+        allow_nan=False,
+    )
+    return len(serialized.encode("utf-8"))
+
+
+def _redact_sensitive_text(value: Any) -> str:
+    """Hapus credential yang mungkin muncul pada teks hasil Gemini atau error."""
+    text = str(value or "")
+    api_key = (settings.gemini_api_key or "").strip()
+    if api_key:
+        text = text.replace(api_key, "[DISEMASKAN]")
+    text = re.sub(r"AIza[0-9A-Za-z_-]{20,}", "[DISEMASKAN]", text)
+    text = re.sub(
+        r"(?i)(x-goog-api-key\s*[=:]\s*)[^&\s,;]+",
+        r"\1[DISEMASKAN]",
+        text,
+    )
+    text = re.sub(
+        r"(?i)([?&](?:key|api_key)=)[^&\s]+",
+        r"\1[DISEMASKAN]",
+        text,
+    )
+    text = re.sub(
+        r"(?i)\bBearer\s+[0-9A-Za-z._~+/=-]{8,}",
+        "Bearer [DISEMASKAN]",
+        text,
+    )
+    text = re.sub(r"\bsk-[0-9A-Za-z_-]{16,}\b", "[DISEMASKAN]", text)
+    text = re.sub(
+        r"(?i)data:[^;\s]+;base64,[0-9A-Za-z+/=]+",
+        "[DATA BINARY DITARMAKAN]",
+        text,
+    )
+    return text
+
+
+def _normalized_result_key(key: Any) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(key).lower())
+
+
+def _sanitize_result_value(value: Any) -> Any:
+    """Bersihkan nilai JSON output tanpa mengubah struktur normal Gemini."""
+    if isinstance(value, dict):
+        cleaned: dict[str, Any] = {}
+        for raw_key, item in value.items():
+            key = str(raw_key)
+            normalized = _normalized_result_key(key)
+            if normalized in _AI_RESULT_BINARY_OR_REQUEST_KEYS:
+                continue
+            if normalized in _AI_RESULT_SENSITIVE_KEYS:
+                cleaned[key] = "[DISEMASKAN]"
+                continue
+            cleaned[key] = _sanitize_result_value(item)
+        return cleaned
+    if isinstance(value, list):
+        return [_sanitize_result_value(item) for item in value]
+    if isinstance(value, str):
+        return _redact_sensitive_text(value)
+    if isinstance(value, float) and not math.isfinite(value):
+        # NaN/Infinity bukan JSON standar dan serializer Starlette/SQLite dapat
+        # menolaknya. Normalisasi menjadi null agar hasil tetap dapat disimpan.
+        return None
+    return value
+
+
+def _sanitize_result_box(value: Any) -> dict[str, Any] | None:
+    """Ambil box angka yang valid; bentuk lain diabaikan."""
+    if not isinstance(value, dict):
+        return None
+    box: dict[str, Any] = {}
+    for key in ("x", "y", "w", "h"):
+        item = value.get(key)
+        if isinstance(item, bool) or not isinstance(item, (int, float)):
+            continue
+        if not math.isfinite(float(item)):
+            continue
+        box[key] = item
+    item_count = value.get("item_count")
+    if isinstance(item_count, int) and not isinstance(item_count, bool) and item_count >= 0:
+        box["item_count"] = item_count
+    return box or None
+
+
+def _safe_table_headers(value: Any) -> list[str] | None:
+    """Ambil header tabel hanya bila berbentuk daftar nama kolom biasa.
+
+    Daftar object ``{"name": ..., "value": ...}`` dan string ``"Name: value"``
+    dapat dipakai untuk menyamarkan header HTTP, sehingga keduanya tidak
+    dianggap aman.
+    """
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        return None
+    if any(re.match(r"^[0-9A-Za-z_-]+\s*:", item) for item in value):
+        return None
+    return [_redact_sensitive_text(item) for item in value]
+
+
+def _sanitize_result_component(value: dict[str, Any]) -> dict[str, Any]:
+    cleaned = _sanitize_result_value(value)
+
+    for key in ("region", "component_type", "source"):
+        if key in value and not isinstance(value.get(key), str):
+            cleaned.pop(key, None)
+
+    if "label" in value and value.get("label") is not None and not isinstance(value.get("label"), str):
+        cleaned.pop("label", None)
+
+    confidence = value.get("confidence")
+    if "confidence" in value:
+        if isinstance(confidence, bool) or not isinstance(confidence, (int, float, str)):
+            cleaned.pop("confidence", None)
+        elif isinstance(confidence, float) and not math.isfinite(confidence):
+            cleaned.pop("confidence", None)
+
+    raw_props = value.get("props")
+    if raw_props is None:
+        if "props" in value:
+            cleaned["props"] = None
+    elif isinstance(raw_props, dict):
+        props = _sanitize_result_value(raw_props)
+        if value.get("component_type") == "table" and "headers" in raw_props:
+            table_headers = _safe_table_headers(raw_props.get("headers"))
+            if table_headers is not None:
+                props["headers"] = table_headers
+        if "box" in props:
+            box = _sanitize_result_box(raw_props.get("box"))
+            if box is None:
+                props.pop("box", None)
+            else:
+                props["box"] = box
+        cleaned["props"] = props
+    else:
+        cleaned.pop("props", None)
+
+    if "box" in value:
+        box = _sanitize_result_box(value.get("box"))
+        if box is None:
+            cleaned.pop("box", None)
+        else:
+            cleaned["box"] = box
+
+    return cleaned
+
+
+def _sanitize_result_assumption(value: dict[str, Any]) -> dict[str, Any]:
+    cleaned = _sanitize_result_value(value)
+    for key in ("topic", "description", "confidence"):
+        if key in value and not isinstance(value.get(key), str):
+            cleaned.pop(key, None)
+    return cleaned
+
+
+def _sanitize_result_layout(value: dict[str, Any]) -> dict[str, Any]:
+    cleaned = _sanitize_result_value(value)
+
+    for key in ("has_sidebar", "has_header"):
+        if key in value and not isinstance(value.get(key), bool):
+            cleaned.pop(key, None)
+
+    regions = value.get("regions")
+    if isinstance(regions, dict):
+        safe_regions: dict[str, Any] = {}
+        for name in ("sidebar", "header", "main"):
+            if name not in regions:
+                continue
+            region = regions.get(name)
+            if region is None:
+                safe_regions[name] = None
+                continue
+            box = _sanitize_result_box(region)
+            if box is not None:
+                safe_regions[name] = box
+        cleaned["regions"] = safe_regions
+    elif "regions" in value:
+        cleaned["regions"] = {}
+
+    sections = value.get("sections")
+    if isinstance(sections, list):
+        safe_sections: list[dict[str, Any]] = []
+        for section in sections:
+            if not isinstance(section, dict):
+                continue
+            safe_section = _sanitize_result_value(section)
+            types = section.get("types")
+            if isinstance(types, list):
+                safe_section["types"] = [item for item in types if isinstance(item, str)]
+            items = section.get("items")
+            if isinstance(items, list):
+                safe_items: list[dict[str, Any]] = []
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    safe_item = _sanitize_result_value(item)
+                    if "type" in item and not isinstance(item.get("type"), str):
+                        safe_item.pop("type", None)
+                    if "label" in item and item.get("label") is not None and not isinstance(item.get("label"), str):
+                        safe_item.pop("label", None)
+                    safe_items.append(safe_item)
+                safe_section["items"] = safe_items
+            safe_sections.append(safe_section)
+        cleaned["sections"] = safe_sections
+    elif "sections" in value:
+        cleaned["sections"] = []
+
+    return cleaned
+
+
+def _sanitize_ai_result(result: dict[str, Any]) -> dict[str, Any]:
+    """Bentuk allowlist respons Gemini yang aman untuk disimpan dan ditampilkan.
+
+    Hanya keys tingkat atas `components`, `assumptions`, dan `layout` yang dipertahankan.
+    Field credential/binary dibuang atau disamarkan, dan bentuk list/dict yang
+    tidak valid dinormalisasi supaya panel frontend tidak bisa gagal render.
+    """
+    cleaned: dict[str, Any] = {}
+    raw_components = result.get("components")
+    if isinstance(raw_components, list):
+        cleaned["components"] = [
+            _sanitize_result_component(component)
+            for component in raw_components
+            if isinstance(component, dict)
+        ]
+    elif "components" in result:
+        cleaned["components"] = []
+
+    raw_assumptions = result.get("assumptions")
+    if isinstance(raw_assumptions, list):
+        cleaned["assumptions"] = [
+            _sanitize_result_assumption(assumption)
+            for assumption in raw_assumptions
+            if isinstance(assumption, dict)
+        ]
+    elif "assumptions" in result:
+        cleaned["assumptions"] = []
+
+    raw_layout = result.get("layout")
+    if isinstance(raw_layout, dict):
+        cleaned["layout"] = _sanitize_result_layout(raw_layout)
+    elif "layout" in result:
+        cleaned["layout"] = {}
+
+    # Guard terakhir bila ada pemanggil yang menambah key baru di masa depan.
+    return {
+        key: value
+        for key, value in cleaned.items()
+        if key in AI_RESULT_ALLOWED_TOP_LEVEL_KEYS
+    }
+
+
+def _trim_ai_result_to_limit(result: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    """Pastikan hasil AI yang disimpan tidak melewati batas 200 KB.
+
+    Hasil Gemini biasanya jauh di bawah batas ini. Untuk payload yang terlalu
+    besar, bagian non-komponen dipangkas terlebih dahulu agar daftar komponen
+    tetap dapat direview. Asumsi dipangkas dari bagian paling akhir, section
+    layout dipangkas secara prefix, dan field layout yang tidak dikenal dibuang
+    bila diperlukan. Komponen baru dipangkas bila daftar komponen itu sendiri
+    melebihi batas.
+
+    Objek asli tidak dimutasi: hasil yang dikembalikan selalu salinan, sehingga
+    respons yang sama masih bisa dipakai untuk merge komponen ke draf.
+    """
+    if _json_size_bytes(result) <= AI_RESULT_MAX_BYTES:
+        return copy.deepcopy(result), False
+
+    trimmed = copy.deepcopy(result)
+
+    def keep_largest_prefix(key: str, container: dict[str, Any] | None = None) -> None:
+        target = trimmed if container is None else container
+        items = target.get(key)
+        if not isinstance(items, list) or not items:
+            return
+
+        low = 0
+        high = len(items)
+        while low < high:
+            middle = (low + high + 1) // 2
+            target[key] = items[:middle]
+            if _json_size_bytes(trimmed) <= AI_RESULT_MAX_BYTES:
+                low = middle
+            else:
+                high = middle - 1
+        target[key] = items[:low]
+
+    def trim_assumptions() -> None:
+        keep_largest_prefix("assumptions")
+
+    # Komponen adalah bagian review yang paling penting. Coba muat asumsi dan
+    # layout terlebih dahulu tanpa memangkas komponen.
+    trim_assumptions()
+
+    layout = trimmed.get("layout")
+    if isinstance(layout, dict):
+        if isinstance(layout.get("sections"), list):
+            keep_largest_prefix("sections", layout)
+
+        # Layout yang diharapkan hanya memuat metadata region/flag/section.
+        # Field tambahan yang aman boleh ikut disimpan selama ukurannya kecil,
+        # tetapi harus dilepas bila payload-nya besar.
+        if _json_size_bytes(trimmed) > AI_RESULT_MAX_BYTES:
+            known_layout_keys = {"regions", "has_sidebar", "has_header", "sections"}
+            for key in list(layout.keys()):
+                if key not in known_layout_keys:
+                    layout.pop(key, None)
+
+        if _json_size_bytes(trimmed) > AI_RESULT_MAX_BYTES:
+            layout.pop("sections", None)
+
+        # Layout yang kini lebih kecil dapat memberi ruang untuk asumsi lagi.
+        trim_assumptions()
+
+    # Daftar komponen sendiri dapat melampaui batas. Prefix terbesar yang masih
+    # muat dipertahankan; bila satu komponen pun tidak muat, list dikosongkan.
+    if _json_size_bytes(trimmed) > AI_RESULT_MAX_BYTES:
+        keep_largest_prefix("components")
+
+    if _json_size_bytes(trimmed) > AI_RESULT_MAX_BYTES:
+        return {}, True
+
+    return trimmed, True
+
+
 def store_analysis(
     db: Session,
     screen: Screen,
@@ -374,34 +792,62 @@ def store_analysis(
     existing = db.scalar(
         select(Reconstruction).where(Reconstruction.screen_id == screen.id)
     )
+    if existing is not None and not replace:
+        return existing
 
+    existing_layout_value = (
+        _sanitize_result_value(existing.layout or {}) if existing is not None else {}
+    )
+    existing_layout = (
+        dict(existing_layout_value) if isinstance(existing_layout_value, dict) else {}
+    )
+    new_layout_value = _sanitize_result_value(analysis.layout or {})
+    new_layout = dict(new_layout_value) if isinstance(new_layout_value, dict) else {}
+    if "tombstones" in existing_layout and "tombstones" not in new_layout:
+        new_layout["tombstones"] = existing_layout["tombstones"]
+    if "overrides" in existing_layout and "overrides" not in new_layout:
+        new_layout["overrides"] = existing_layout["overrides"]
+
+    # Berlakukan batas 200 KB sebagai kontrak penyimpanan, bukan hanya kontrak
+    # di jalur analyze_with_ai. Analysis yang dibuat di service lain ikut aman.
+    # Allowlist/DLP di sini juga melindungi caller yang tidak melalui analyze_with_ai.
+    if analysis.ai_result is not None:
+        if isinstance(analysis.ai_result, dict):
+            safe_result = _sanitize_ai_result(analysis.ai_result)
+            stored_result, was_truncated = _trim_ai_result_to_limit(safe_result)
+            analysis.ai_result = stored_result
+            # analyze_with_ai() mungkin sudah memangkas payload. Saat storage
+            # dipanggil lagi, hasil yang sudah muat tidak boleh menghapus flag
+            # truncation yang benar.
+            analysis.ai_result_truncated = analysis.ai_result_truncated or was_truncated
+            analysis.ai_result_size_bytes = _json_size_bytes(stored_result)
+        else:
+            analysis.ai_result = None
+            analysis.ai_result_truncated = False
+            analysis.ai_result_size_bytes = 0
+
+    analysis.ai_error = _redact_sensitive_text(analysis.ai_error)
+    new_layout["ai_status"] = analysis.ai_status
+    new_layout["ai_model"] = analysis.ai_model
+    new_layout["ai_error"] = analysis.ai_error
+    new_layout["ai_source"] = analysis.source
+    new_layout["ai_analyzed_at"] = analysis.ai_analyzed_at
+    if analysis.ai_result is not None:
+        new_layout["ai_result"] = analysis.ai_result
+        new_layout["ai_result_truncated"] = analysis.ai_result_truncated
+        new_layout["ai_result_size_bytes"] = analysis.ai_result_size_bytes
+    else:
+        new_layout.pop("ai_result", None)
+        new_layout.pop("ai_result_truncated", None)
+        new_layout.pop("ai_result_size_bytes", None)
+
+    generated_by = _generated_by_for_source(analysis.source)
     if existing is not None:
-        if not replace:
-            return existing
         reconstruction = existing
         reconstruction.status = "draft"
-
-        # Pertahankan tombstones dan overrides dari layout lama
-        existing_layout = dict(existing.layout or {})
-        new_layout = dict(analysis.layout or {})
-        if "tombstones" in existing_layout and "tombstones" not in new_layout:
-            new_layout["tombstones"] = existing_layout["tombstones"]
-        if "overrides" in existing_layout and "overrides" not in new_layout:
-            new_layout["overrides"] = existing_layout["overrides"]
         reconstruction.layout = new_layout
         reconstruction.code_text = code
-        # Set generated_by berdasarkan sumber analisis
-        if analysis.source == "ai-vision":
-            reconstruction.generated_by = "ai-vision"
-        elif analysis.source == "hybrid":
-            reconstruction.generated_by = "hybrid"
-        else:
-            reconstruction.generated_by = "rule-engine"
-        # Tambahkan info AI status ke layout untuk ditampilkan di UI
-        new_layout["ai_status"] = analysis.ai_status
-        new_layout["ai_model"] = analysis.ai_model
-        new_layout["ai_error"] = analysis.ai_error
-        new_layout["ai_source"] = analysis.source
+        reconstruction.generated_by = generated_by
         reconstruction.reviewed_by = None
         reconstruction.reviewed_at = None
 
@@ -416,19 +862,6 @@ def store_analysis(
         reconstruction.assumptions.clear()
         db.flush()
     else:
-        new_layout = dict(analysis.layout or {})
-        # Set generated_by berdasarkan sumber analisis
-        if analysis.source == "ai-vision":
-            generated_by = "ai-vision"
-        elif analysis.source == "hybrid":
-            generated_by = "hybrid"
-        else:
-            generated_by = "rule-engine"
-        # Tambahkan info AI status ke layout untuk ditampilkan di UI
-        new_layout["ai_status"] = analysis.ai_status
-        new_layout["ai_model"] = analysis.ai_model
-        new_layout["ai_error"] = analysis.ai_error
-        new_layout["ai_source"] = analysis.source
         reconstruction = Reconstruction(
             screen_id=screen.id,
             project_id=screen.project_id,
@@ -450,14 +883,24 @@ def store_analysis(
         if c.region == "manual" or c.source == "manual"
     ]
 
-    for component in analysis.components:
+    safe_analysis_components = [
+        _sanitize_result_component(component)
+        for component in analysis.components
+        if isinstance(component, dict)
+    ]
+    for component in safe_analysis_components:
         if component.get("source") == "manual" or component.get("region") == "manual":
             continue
 
         raw_props = component.get("props") or {}
         raw_box = raw_props.get("box")
         comp_label = component.get("label") or ""
-        comp_type = component.get("component_type") or "button"
+        comp_type = component.get("component_type")
+        # Komponen tanpa tipe yang valid harus tetap ditolak oleh filter
+        # generator. Jangan mengubahnya menjadi "button" karena itu akan
+        # mengubah admission generator secara diam-diam.
+        if not isinstance(comp_type, str) or not comp_type.strip():
+            continue
 
         # Check tombstone
         bx = round(float(raw_box.get("x", 0))) if raw_box else 0
@@ -509,8 +952,8 @@ def store_analysis(
         db.add(
             ReconstructionComponent(
                 reconstruction_id=reconstruction.id,
-                region=component["region"],
-                component_type=component["component_type"],
+                region=component.get("region") or "main",
+                component_type=comp_type,
                 label=final_label,
                 props=final_props,
                 order_index=component.get("order_index", 0),
@@ -518,12 +961,17 @@ def store_analysis(
             )
         )
 
-    for assumption in analysis.assumptions:
+    safe_analysis_assumptions = [
+        _sanitize_result_assumption(assumption)
+        for assumption in analysis.assumptions
+        if isinstance(assumption, dict)
+    ]
+    for assumption in safe_analysis_assumptions:
         db.add(
             ReconstructionAssumption(
                 reconstruction_id=reconstruction.id,
-                topic=assumption["topic"],
-                description=assumption["description"],
+                topic=assumption.get("topic") or "Umum",
+                description=assumption.get("description") or "",
                 confidence=assumption.get("confidence", "medium"),
             )
         )
@@ -554,6 +1002,7 @@ OUTPUT FORMAT (JSON only, no markdown):
       "region": "header|sidebar|main|footer",
       "component_type": "button|link|input|select|textarea|heading|table|card|image|nav-item|header-item|field|form|icon|logo|dropdown",
       "label": "string (deskriptif, bahasa Indonesia, mis: 'Tombol Buy Now', 'Menu HOME', 'Field Email', 'Kartu Fitur HDMI')",
+      "confidence": 0.0,
       "props": {
         "box": {"x": number, "y": number, "w": number, "h": number},
         "input_type": "text|email|password|number|select",
@@ -606,6 +1055,10 @@ LABEL (wajib deskriptif):
 - Gunakan teks yang terlihat di elemen jika ada
 - Tambahkan konteks: "Tombol Simpan", "Menu Dashboard", "Field Password", "Kartu Total Penjualan"
 - Jangan pakai label generik seperti "Button", "Div", "Element"
+
+CONFIDENCE (wajib):
+- Beri confidence per komponen berupa angka desimal 0.0 sampai 1.0
+- Gunakan nilai closer ke 1.0 bila teks dan posisi elemen terlihat jelas
 
 HINDARI DUPLIKAT:
 - Jangan buat dua kotak untuk elemen yang sama persis
@@ -663,6 +1116,13 @@ def _parse_retry_after(header: str | None) -> float | None:
 
 async def analyze_with_ai(screen: Screen, existing_analysis: Analysis) -> Analysis:
     """Kirim screenshot ke Gemini vision model, merge hasil ke existing analysis."""
+    # Jalankan baru selalu dimulai tanpa hasil/error lama. Hasil parsial hanya
+    # boleh dipertahankan bila seluruh respons AI berhasil di-parse.
+    existing_analysis.ai_result = None
+    existing_analysis.ai_result_truncated = False
+    existing_analysis.ai_result_size_bytes = 0
+    existing_analysis.ai_error = ""
+
     if not settings.gemini_api_key:
         if settings.app_env == "test":
             # Runtime validation (pengaman): tolak model di luar daftar izin
@@ -671,10 +1131,8 @@ async def analyze_with_ai(screen: Screen, existing_analysis: Analysis) -> Analys
             if primary_model not in allowed:
                 error_msg = f"Model tidak diizinkan (runtime): {primary_model}. Pilihan: {', '.join(allowed)}."
                 logger.error(error_msg)
-                existing_analysis.ai_status = "failed"
-                existing_analysis.ai_error = error_msg
                 existing_analysis.ai_model = primary_model
-                existing_analysis.source = "rule-engine"
+                _mark_ai_failure(existing_analysis, error_msg)
                 return existing_analysis
             # Validasi model cadangan mentah (termasuk yang difilter oleh gemini_model_chain)
             raw_fallback_models: list[str] = []
@@ -687,23 +1145,20 @@ async def analyze_with_ai(screen: Screen, existing_analysis: Analysis) -> Analys
                 if model not in allowed:
                     error_msg = f"Model cadangan tidak diizinkan (runtime): {model}. Pilihan: {', '.join(allowed)}."
                     logger.error(error_msg)
-                    existing_analysis.ai_status = "failed"
-                    existing_analysis.ai_error = error_msg
                     existing_analysis.ai_model = primary_model
-                    existing_analysis.source = "rule-engine"
+                    _mark_ai_failure(existing_analysis, error_msg)
                     return existing_analysis
                 if model == primary_model:
                     error_msg = f"Model cadangan ({model}) tidak boleh sama dengan model utama ({primary_model})."
                     logger.error(error_msg)
-                    existing_analysis.ai_status = "failed"
-                    existing_analysis.ai_error = error_msg
                     existing_analysis.ai_model = primary_model
-                    existing_analysis.source = "rule-engine"
+                    _mark_ai_failure(existing_analysis, error_msg)
                     return existing_analysis
             # Mock AI vision output untuk lingkungan test
             existing_analysis.ai_model = "mock-vision-test"
             existing_analysis.ai_status = "success"
             existing_analysis.source = "hybrid"
+            existing_analysis.ai_analyzed_at = datetime.now(timezone.utc).isoformat()
             existing_analysis.layout["has_sidebar"] = True
             existing_analysis.layout["regions"] = {
                 "sidebar": {"x": 0, "y": 0, "w": 200, "h": 900, "item_count": 4},
@@ -749,10 +1204,22 @@ async def analyze_with_ai(screen: Screen, existing_analysis: Analysis) -> Analys
                 {"topic": "Komponen", "description": "Tabel dan kartu terdeteksi", "confidence": "medium"},
                 {"topic": "Aturan bisnis", "description": "Aturan bisnis tidak bisa dibaca dari visual", "confidence": "low"},
             ]
+            mock_ai_result = {
+                "components": mock_components,
+                "assumptions": existing_analysis.assumptions,
+                "layout": {
+                    "regions": existing_analysis.layout.get("regions", {}),
+                    "has_sidebar": True,
+                    "has_header": False,
+                },
+            }
+            existing_analysis.ai_result = mock_ai_result
+            existing_analysis.ai_result_size_bytes = _json_size_bytes(mock_ai_result)
             return existing_analysis
         logger.warning("GEMINI_API_KEY tidak dikonfigurasi, skip AI vision")
         existing_analysis.ai_status = "not_configured"
         existing_analysis.ai_error = "GEMINI_API_KEY tidak dikonfigurasi di .env"
+        existing_analysis.ai_analyzed_at = datetime.now(timezone.utc).isoformat()
         existing_analysis.source = "rule-engine"
         return existing_analysis
 
@@ -762,6 +1229,8 @@ async def analyze_with_ai(screen: Screen, existing_analysis: Analysis) -> Analys
         image_bytes = screenshot_full_path.read_bytes()
     except Exception as e:
         logger.error("Gagal baca screenshot %s: %s", screenshot_full_path, e)
+        existing_analysis.ai_model = settings.gemini_model
+        _mark_ai_failure(existing_analysis, f"Gagal membaca screenshot: {e}")
         return existing_analysis
     img_b64 = base64.b64encode(image_bytes).decode()
     mime_type = _image_mime_type(screenshot_full_path.suffix)
@@ -822,28 +1291,22 @@ Output HANYA JSON valid sesuai format di system prompt."""
         if primary_model not in allowed:
             error_msg = f"Model tidak diizinkan (runtime): {primary_model}. Pilihan: {', '.join(allowed)}."
             logger.error(error_msg)
-            existing_analysis.ai_status = "failed"
-            existing_analysis.ai_error = error_msg
             existing_analysis.ai_model = primary_model
-            existing_analysis.source = "rule-engine"
+            _mark_ai_failure(existing_analysis, error_msg)
             return existing_analysis
         # Validasi model cadangan mentah (termasuk yang difilter oleh gemini_model_chain)
         for model in raw_fallback_models:
             if model not in allowed:
                 error_msg = f"Model cadangan tidak diizinkan (runtime): {model}. Pilihan: {', '.join(allowed)}."
                 logger.error(error_msg)
-                existing_analysis.ai_status = "failed"
-                existing_analysis.ai_error = error_msg
                 existing_analysis.ai_model = primary_model
-                existing_analysis.source = "rule-engine"
+                _mark_ai_failure(existing_analysis, error_msg)
                 return existing_analysis
             if model == primary_model:
                 error_msg = f"Model cadangan ({model}) tidak boleh sama dengan model utama ({primary_model})."
                 logger.error(error_msg)
-                existing_analysis.ai_status = "failed"
-                existing_analysis.ai_error = error_msg
                 existing_analysis.ai_model = primary_model
-                existing_analysis.source = "rule-engine"
+                _mark_ai_failure(existing_analysis, error_msg)
                 return existing_analysis
 
         data = None
@@ -864,7 +1327,7 @@ Output HANYA JSON valid sesuai format di system prompt."""
                         timeout=httpx.Timeout(90.0, connect=15.0),
                     )
                 except httpx.TimeoutException as e:
-                    last_error = (408, f"Timeout: {e}")
+                    last_error = (408, _redact_sensitive_text(f"Timeout: {e}"))
                     if attempt < max_retries:
                         delay = min(base_delay * (3 ** attempt), max_delay)
                         logger.warning(
@@ -877,21 +1340,23 @@ Output HANYA JSON valid sesuai format di system prompt."""
 
                 if resp.status_code == 404:
                     # Model tidak ditemukan - jangan retry, error langsung
-                    error_detail = resp.text[:500]
+                    error_detail = _redact_sensitive_text(resp.text[:500])
                     logger.error("Gemini model '%s' tidak ditemukan (404): %s", primary_model, error_detail)
-                    existing_analysis.ai_status = "failed"
-                    existing_analysis.ai_error = (
+                    error_msg = (
                         f"Model tidak ditemukan: {primary_model}. "
                         f"Cek GEMINI_MODEL di .env. Detail: {error_detail}"
                     )
                     existing_analysis.ai_model = primary_model
-                    existing_analysis.source = "rule-engine"
+                    _mark_ai_failure(existing_analysis, error_msg)
                     return existing_analysis
 
                 if resp.status_code in (429, 503):
                     # Rate limit / service unavailable - retry dengan backoff
                     retry_after = _parse_retry_after(resp.headers.get("Retry-After"))
-                    last_error = (resp.status_code, resp.text[:500])
+                    last_error = (
+                        resp.status_code,
+                        _redact_sensitive_text(resp.text[:500]),
+                    )
                     if attempt < max_retries:
                         delay = retry_after if retry_after is not None else min(base_delay * (3 ** attempt), max_delay)
                         logger.warning(
@@ -905,13 +1370,13 @@ Output HANYA JSON valid sesuai format di system prompt."""
 
                 if resp.status_code >= 400:
                     # Error lain - tidak retry, error langsung
+                    safe_error = _redact_sensitive_text(resp.text[:800])
                     logger.error(
-                        "Gemini error %s pada %s: %s", resp.status_code, primary_model, resp.text[:800]
+                        "Gemini error %s pada %s: %s", resp.status_code, primary_model, safe_error
                     )
-                    existing_analysis.ai_status = "failed"
-                    existing_analysis.ai_error = f"Gemini error {resp.status_code}: {resp.text[:200]}"
+                    error_msg = f"Gemini error {resp.status_code}: {safe_error[:200]}"
                     existing_analysis.ai_model = primary_model
-                    existing_analysis.source = "rule-engine"
+                    _mark_ai_failure(existing_analysis, error_msg)
                     return existing_analysis
 
                 # Sukses
@@ -944,7 +1409,10 @@ Output HANYA JSON valid sesuai format di system prompt."""
                         continue
                     if resp.status_code >= 400:
                         logger.error(
-                            "Gemini fallback error %s pada %s: %s", resp.status_code, model, resp.text[:800]
+                            "Gemini fallback error %s pada %s: %s",
+                            resp.status_code,
+                            model,
+                            _redact_sensitive_text(resp.text[:800]),
                         )
                         continue
 
@@ -966,10 +1434,8 @@ Output HANYA JSON valid sesuai format di system prompt."""
                 error_msg = f"Semua model gagal (primary: {primary_model}, fallback: {fallback_models})"
 
             logger.error("Gemini analisis gagal: %s", error_msg)
-            existing_analysis.ai_status = "failed"
-            existing_analysis.ai_error = error_msg
             existing_analysis.ai_model = primary_model
-            existing_analysis.source = "rule-engine"
+            _mark_ai_failure(existing_analysis, error_msg)
             return existing_analysis
 
         existing_analysis.ai_model = used_model
@@ -987,6 +1453,7 @@ Output HANYA JSON valid sesuai format di system prompt."""
                 "Gemini tidak mengembalikan kandidat (blockReason=%s)",
                 feedback.get("blockReason"),
             )
+            _mark_ai_failure(existing_analysis, "Gemini tidak mengembalikan kandidat")
             return existing_analysis
 
         candidate = candidates[0]
@@ -1001,6 +1468,7 @@ Output HANYA JSON valid sesuai format di system prompt."""
                 "Gemini mengembalikan konten kosong (finishReason=%s)",
                 candidate.get("finishReason"),
             )
+            _mark_ai_failure(existing_analysis, "Gemini mengembalikan konten kosong")
             return existing_analysis
 
         # Parse JSON dari response (responseMimeType=application/json seharusnya valid)
@@ -1077,16 +1545,46 @@ Output HANYA JSON valid sesuai format di system prompt."""
         try:
             ai_result = parse_json_robust(content)
         except json.JSONDecodeError as e:
-            logger.error("Gagal parse JSON dari AI: %s\nContent: %s", e, content[:1000])
+            logger.error(
+                "Gagal parse JSON dari AI: %s (panjang respons: %d karakter)",
+                e,
+                len(content),
+            )
+            _mark_ai_failure(existing_analysis, "Format JSON hasil AI Vision tidak valid")
             return existing_analysis
 
+        if not isinstance(ai_result, dict):
+            logger.error("Hasil AI bukan objek JSON: %s", type(ai_result).__name__)
+            _mark_ai_failure(existing_analysis, "Format hasil AI Vision tidak valid")
+            return existing_analysis
+
+        # Simpan hanya objek hasil parse Gemini yang lolos allowlist/DLP.
+        # Payload request (termasuk header API dan gambar base64) tidak pernah
+        # masuk ke storage; field sensitif pada output pun disamarkan.
+        safe_ai_result = _sanitize_ai_result(ai_result)
+        stored_ai_result, was_truncated = _trim_ai_result_to_limit(safe_ai_result)
+        existing_analysis.ai_result = stored_ai_result
+        existing_analysis.ai_result_truncated = was_truncated
+        existing_analysis.ai_result_size_bytes = _json_size_bytes(stored_ai_result)
+        existing_analysis.ai_analyzed_at = datetime.now(timezone.utc).isoformat()
+
         # Merge AI components (dedup by box IoU)
-        ai_components = ai_result.get("components", [])
+        raw_components = safe_ai_result.get("components", [])
+        ai_components = (
+            [component for component in raw_components if isinstance(component, dict)]
+            if isinstance(raw_components, list)
+            else []
+        )
         merged = _merge_components(existing_analysis.components, ai_components, viewport)
         existing_analysis.components = merged
 
         # Merge AI assumptions (avoid duplicates)
-        ai_assumptions = ai_result.get("assumptions", [])
+        raw_assumptions = safe_ai_result.get("assumptions", [])
+        ai_assumptions = (
+            [assumption for assumption in raw_assumptions if isinstance(assumption, dict)]
+            if isinstance(raw_assumptions, list)
+            else []
+        )
         existing_topics = {(a["topic"], a["description"][:50]) for a in existing_analysis.assumptions}
         for a in ai_assumptions:
             key = (a.get("topic", ""), a.get("description", "")[:50])
@@ -1096,8 +1594,8 @@ Output HANYA JSON valid sesuai format di system prompt."""
 
         # Layout: ambil flag struktur dari AI, regions tetap dari analisis
         # deterministik (satuannya piksel, sedangkan AI mengirim persen).
-        ai_layout = ai_result.get("layout")
-        if ai_layout:
+        ai_layout = safe_ai_result.get("layout")
+        if isinstance(ai_layout, dict):
             for key in ("has_sidebar", "has_header"):
                 if key in ai_layout:
                     existing_analysis.layout[key] = ai_layout[key]
@@ -1126,17 +1624,17 @@ Output HANYA JSON valid sesuai format di system prompt."""
         }
 
         logger.info(
-            "AI vision analysis via %s: +%d components, +%d assumptions",
+            "AI vision analysis via %s: +%d components, +%d assumptions; stored=%d bytes%s",
             used_model,
             len(ai_components),
             len(ai_assumptions),
+            existing_analysis.ai_result_size_bytes,
+            " (truncated)" if existing_analysis.ai_result_truncated else "",
         )
 
     except Exception as e:
-        logger.exception("AI vision analysis gagal: %s", e)
-        existing_analysis.ai_status = "failed"
-        existing_analysis.ai_error = str(e)
-        existing_analysis.source = "rule-engine"
+        logger.exception("AI vision analysis gagal: %s", _redact_sensitive_text(e))
+        _mark_ai_failure(existing_analysis, str(e))
 
     return existing_analysis
 
@@ -1187,8 +1685,11 @@ def _merge_components(
                 duplicate = True
                 break
         if not duplicate:
-            new_c["source"] = "ai-vision"
-            merged.append(new_c)
+            # Jangan mutasi respons AI mentah; ia tetap disimpan apa adanya di
+            # layout["ai_result"] dan harus bisa ditampilkan sebagai JSON mentah.
+            merged_new = copy.deepcopy(new_c)
+            merged_new["source"] = "ai-vision"
+            merged.append(merged_new)
     return merged
 
 

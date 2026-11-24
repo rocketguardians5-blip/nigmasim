@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 
 import httpx
@@ -10,7 +11,11 @@ import respx
 from fastapi.testclient import TestClient
 
 from app.db.session import SessionLocal
-from app.services.reconstructor import Analysis
+from app.services.reconstructor import (
+    AI_RESULT_MAX_BYTES,
+    Analysis,
+    store_analysis,
+)
 from app.models.capture import Screen
 
 
@@ -976,4 +981,649 @@ def test_usability_check_endpoint_exposes_result(
     result = response.json()
     assert result["usable_count"] == 0
     assert result["warning"] == USABILITY_WARNING
+
+
+# ==================== Penyimpanan Hasil AI Vision ====================
+
+
+def _store_analysis_result(
+    screen_id: int,
+    result: dict | None,
+    *,
+    status: str = "success",
+    source: str = "hybrid",
+    ai_error: str | None = None,
+    component_props: dict | None = None,
+    layout_extra: dict | None = None,
+    analysis_components: list[dict] | None = None,
+) -> None:
+    """Simpan analisis melalui jalur service yang sama dengan endpoint."""
+    with SessionLocal() as db:
+        screen = db.get(Screen, screen_id)
+        assert screen is not None
+        analysis = Analysis(
+            layout={
+                "viewport": {"width": 1440, "height": 900},
+                "regions": {
+                    "sidebar": None,
+                    "header": None,
+                    "main": {"x": 0, "y": 0, "w": 1440, "h": 900},
+                },
+                "sections": [],
+                **(layout_extra or {}),
+            },
+            components=(
+                analysis_components
+                if analysis_components is not None
+                else [
+                    {
+                        "region": "main",
+                        "component_type": "button",
+                        "label": "Tombol Simpan",
+                        "props": component_props
+                        or {"box": {"x": 10, "y": 20, "w": 5, "h": 4}},
+                        "source": "ai-vision",
+                    }
+                ]
+            ),
+            assumptions=[],
+            ai_model="gemini-3.6-flash",
+            ai_status=status,
+            ai_error=(
+                ai_error
+                if ai_error is not None
+                else ("" if status == "success" else "Analisis AI gagal")
+            ),
+            ai_result=result,
+            ai_analyzed_at="2026-11-23T10:00:00+00:00",
+            source=source,
+        )
+        store_analysis(
+            db,
+            screen,
+            analysis,
+            "// draf rekonstruksi",
+            actor_id=None,
+        )
+        db.commit()
+
+
+def test_ai_result_is_persisted_and_returned_by_get(
+    client: TestClient, auth_headers: dict[str, str], project_id: int
+) -> None:
+    """GET mengembalikan objek ai_result persis beserta metadata analisisnya."""
+    screen_id = _make_screen(project_id)
+    ai_result = {
+        "components": [
+            {
+                "region": "main",
+                "component_type": "button",
+                "label": "Tombol Simpan",
+                "confidence": 0.92,
+                "props": {"box": {"x": 10, "y": 20, "w": 5, "h": 4}},
+                "source": "ai-vision",
+            }
+        ],
+        "assumptions": [
+            {
+                "topic": "Komponen",
+                "description": "Tombol utama terlihat jelas",
+                "confidence": "high",
+            }
+        ],
+        "layout": {
+            "regions": {
+                "sidebar": None,
+                "header": None,
+                "main": {"x": 0, "y": 0, "w": 100, "h": 100},
+            },
+            "has_sidebar": False,
+            "has_header": False,
+        },
+    }
+    _store_analysis_result(screen_id, ai_result)
+
+    response = client.get(
+        f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+    draft = response.json()
+    layout = draft["layout"]
+
+    assert layout["ai_result"] == ai_result
+    assert layout["ai_status"] == "success"
+    assert layout["ai_model"] == "gemini-3.6-flash"
+    assert layout["ai_analyzed_at"] == "2026-11-23T10:00:00+00:00"
+    assert layout["ai_source"] == "hybrid"
+    assert layout["ai_result_truncated"] is False
+    assert layout["ai_result_size_bytes"] == len(
+        json.dumps(ai_result, ensure_ascii=True).encode("utf-8")
+    )
+    assert draft["generated_by"] == "hybrid"
+
+
+def test_ai_result_over_limit_is_truncated_without_mutating_source(
+    client: TestClient, auth_headers: dict[str, str], project_id: int
+) -> None:
+    """Payload >200 KB dipangkas menjadi JSON valid dan ditandai truncated."""
+    screen_id = _make_screen(project_id)
+    ai_result = {
+        "components": [
+            {
+                "region": "main",
+                "component_type": "button",
+                "label": f"Komponen besar {index}-{'x' * 50_000}",
+                "props": {"box": {"x": index, "y": index, "w": 5, "h": 4}},
+                "source": "ai-vision",
+            }
+            for index in range(5)
+        ],
+        "assumptions": [],
+        "layout": {"has_sidebar": False, "has_header": False},
+    }
+    original_labels = [
+        component["label"] for component in ai_result["components"]
+    ]
+
+    _store_analysis_result(screen_id, ai_result)
+
+    response = client.get(
+        f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+    layout = response.json()["layout"]
+    stored = layout["ai_result"]
+
+    assert isinstance(stored, dict)
+    assert layout["ai_result_truncated"] is True
+    assert len(stored["components"]) < len(ai_result["components"])
+    assert len(stored["components"]) > 0
+    stored_size = len(json.dumps(stored, ensure_ascii=True).encode("utf-8"))
+    assert stored_size <= AI_RESULT_MAX_BYTES
+    assert layout["ai_result_size_bytes"] == stored_size
+
+    # Objek sumber tidak boleh ikut terpangkas saat storage.
+    assert [component["label"] for component in ai_result["components"]] == original_labels
+
+
+def test_ai_result_truncation_keeps_components_when_other_sections_are_oversized(
+    client: TestClient, auth_headers: dict[str, str], project_id: int
+) -> None:
+    """Asumsi/section besar tidak boleh membuat komponen review hilang."""
+    screen_id = _make_screen(project_id)
+    ai_result = {
+        "components": [
+            {
+                "region": "main",
+                "component_type": "button",
+                "label": "Tombol Simpan",
+                "props": {"box": {"x": 10, "y": 20, "w": 5, "h": 4}},
+                "source": "ai-vision",
+            }
+        ],
+        "assumptions": [
+            {
+                "topic": "Layout",
+                "description": "x" * (AI_RESULT_MAX_BYTES + 10_000),
+                "confidence": "low",
+            }
+        ],
+        "layout": {
+            "has_sidebar": False,
+            "has_header": False,
+            "sections": [
+                {
+                    "label": "Section besar",
+                    "items": [
+                        {"type": "text", "label": "y" * (AI_RESULT_MAX_BYTES + 10_000)}
+                    ],
+                }
+            ],
+        },
+    }
+
+    _store_analysis_result(screen_id, ai_result)
+
+    response = client.get(
+        f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+    layout = response.json()["layout"]
+    stored = layout["ai_result"]
+
+    assert layout["ai_result_truncated"] is True
+    assert len(stored["components"]) == 1
+    assert stored["components"][0]["label"] == "Tombol Simpan"
+    assert len(json.dumps(stored, ensure_ascii=True).encode("utf-8")) <= AI_RESULT_MAX_BYTES
+    assert layout["ai_result_size_bytes"] == len(
+        json.dumps(stored, ensure_ascii=True).encode("utf-8")
+    )
+
+
+def test_ai_result_size_accounts_for_sqlite_ascii_json_serialization(
+    client: TestClient, auth_headers: dict[str, str], project_id: int
+) -> None:
+    """Unicode yang di-escape SQLite tidak boleh membuat payload melewati batas."""
+    screen_id = _make_screen(project_id)
+    ai_result = {
+        "components": [],
+        "assumptions": [],
+        "layout": {"description": "é" * 100_000},
+    }
+    assert len(json.dumps(ai_result, ensure_ascii=True).encode("utf-8")) > AI_RESULT_MAX_BYTES
+
+    _store_analysis_result(screen_id, ai_result)
+
+    response = client.get(
+        f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+    layout = response.json()["layout"]
+    stored = layout["ai_result"]
+    stored_size = len(json.dumps(stored, ensure_ascii=True).encode("utf-8"))
+
+    assert layout["ai_result_truncated"] is True
+    assert stored_size <= AI_RESULT_MAX_BYTES
+    assert layout["ai_result_size_bytes"] == stored_size
+
+
+def test_failed_ai_result_clears_previous_stored_result(
+    client: TestClient, auth_headers: dict[str, str], project_id: int
+) -> None:
+    """Kegagalan baru tidak boleh menyisakan hasil AI lama yang menyesatkan."""
+    screen_id = _make_screen(project_id)
+    _store_analysis_result(
+        screen_id,
+        {"components": [], "assumptions": [], "layout": {}},
+    )
+    _store_analysis_result(
+        screen_id,
+        None,
+        status="failed",
+        source="rule-engine",
+    )
+
+    response = client.get(
+        f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+    draft = response.json()
+    layout = draft["layout"]
+
+    assert layout["ai_status"] == "failed"
+    assert "ai_result" not in layout
+    assert "ai_result_truncated" not in layout
+    assert "ai_result_size_bytes" not in layout
+    assert layout["ai_source"] == "rule-engine"
+    assert draft["generated_by"] == "rule-engine"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_ai_result_storage_excludes_request_credentials_and_screenshot(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    project_id: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Header API, payload request, dan base64 screenshot tidak ikut disimpan."""
+    from app.core.config import settings
+
+    screen_id = _make_screen(project_id)
+    secret = "secret-storage-key-must-not-persist"
+    monkeypatch.setattr(settings, "gemini_api_key", secret)
+    monkeypatch.setattr(settings, "gemini_model", "gemini-3.6-flash")
+    monkeypatch.setattr(settings, "gemini_fallback_models", "")
+    monkeypatch.setattr(settings, "gemini_allow_fallback", False)
+    monkeypatch.setattr(settings, "gemini_max_retries", 0)
+    _make_test_screenshot(screen_id)
+
+    mock_response = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "text": json.dumps(
+                                {
+                                    "components": [],
+                                    "assumptions": [],
+                                    "layout": {"has_sidebar": False},
+                                }
+                            )
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+    route = respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
+    ).mock(return_value=httpx.Response(200, json=mock_response))
+
+    with SessionLocal() as db:
+        screen = db.get(Screen, screen_id)
+        assert screen is not None
+        analysis = await analyze_with_ai(screen, Analysis())
+        store_analysis(
+            db,
+            screen,
+            analysis,
+            "// draf rekonstruksi",
+            actor_id=None,
+        )
+        db.commit()
+
+    assert route.called
+    assert route.calls[0].request.headers.get("x-goog-api-key") == secret
+
+    response = client.get(
+        f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+    layout = response.json()["layout"]
+    serialized = json.dumps(layout, ensure_ascii=False)
+
+    assert secret not in serialized
+    assert "x-goog-api-key" not in serialized
+    assert "inlineData" not in serialized
+    assert "base64" not in serialized.lower()
+    assert layout["ai_result"] == {
+        "components": [],
+        "assumptions": [],
+        "layout": {"has_sidebar": False},
+    }
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_ai_result_truncated_flag_survives_analyze_then_store(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    project_id: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Flag truncation dari analyze_with_ai tidak hilang saat storage."""
+    from app.core.config import settings
+
+    screen_id = _make_screen(project_id)
+    monkeypatch.setattr(settings, "gemini_api_key", "test-key")
+    monkeypatch.setattr(settings, "gemini_model", "gemini-3.6-flash")
+    monkeypatch.setattr(settings, "gemini_fallback_models", "")
+    monkeypatch.setattr(settings, "gemini_allow_fallback", False)
+    monkeypatch.setattr(settings, "gemini_max_retries", 0)
+    _make_test_screenshot(screen_id)
+
+    mock_response = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "text": json.dumps(
+                                {
+                                    "components": [
+                                        {
+                                            "region": "main",
+                                            "component_type": "button",
+                                            "label": "Tombol Simpan",
+                                            "padding": "x" * (AI_RESULT_MAX_BYTES + 10_000),
+                                            "props": {
+                                                "box": {"x": 10, "y": 20, "w": 5, "h": 4}
+                                            },
+                                            "source": "ai-vision",
+                                        }
+                                    ],
+                                    "assumptions": [],
+                                    "layout": {"has_sidebar": False},
+                                }
+                            )
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
+    ).mock(return_value=httpx.Response(200, json=mock_response))
+
+    with SessionLocal() as db:
+        screen = db.get(Screen, screen_id)
+        assert screen is not None
+        analysis = await analyze_with_ai(screen, Analysis())
+        assert analysis.ai_result_truncated is True
+        store_analysis(
+            db,
+            screen,
+            analysis,
+            "// draf rekonstruksi",
+            actor_id=None,
+        )
+        db.commit()
+
+    response = client.get(
+        f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+    layout = response.json()["layout"]
+
+    assert layout["ai_result_truncated"] is True
+    assert layout["ai_result_size_bytes"] <= AI_RESULT_MAX_BYTES
+    assert len(json.dumps(layout["ai_result"], ensure_ascii=True).encode("utf-8")) <= AI_RESULT_MAX_BYTES
+
+
+def test_ai_result_allowlist_and_dlp_excludes_sensitive_output_fields(
+    client: TestClient, auth_headers: dict[str, str], project_id: int
+) -> None:
+    """Field request/credential/binary pada output Gemini tidak ikut tersimpan."""
+    screen_id = _make_screen(project_id)
+    secret = "secret-output-key-must-not-persist"
+    binary = "data:image/png;base64,QUJDREVGRw=="
+    ai_result = {
+        "components": [
+            {
+                "region": "main",
+                "component_type": "button",
+                "label": "Tombol Simpan",
+                "confidence": 0.91,
+                "props": {
+                    "box": {"x": 10, "y": 20, "w": 5, "h": 4},
+                    "authorization": f"Bearer {secret}",
+                    "nested": {"api_key": secret, "x_api_key": secret},
+                    "headers": [{"name": "X-Custom", "value": secret}],
+                    "http_headers": {"X-Custom": secret},
+                    "response_headers": {"X-Custom": secret},
+                    "inlineData": {"mimeType": "image/png", "data": binary},
+                },
+                "source": "ai-vision",
+            },
+            {
+                "region": "main",
+                "component_type": "table",
+                "label": "Tabel Risiko",
+                "props": {
+                    "box": {"x": 20, "y": 30, "w": 50, "h": 20},
+                    "headers": ["ID Risiko", "Judul"],
+                },
+                "source": "ai-vision",
+            }
+        ],
+        "assumptions": [
+            {
+                "topic": "Komponen",
+                "description": "Tombol utama terlihat jelas",
+                "confidence": "high",
+            }
+        ],
+        "layout": {
+            "has_sidebar": False,
+            "has_header": False,
+            "http_headers": {"X-Custom": secret},
+        },
+        "request_payload": {
+            "headers": {"x-goog-api-key": secret},
+            "inlineData": {"data": binary},
+        },
+        "headers": {"x-goog-api-key": secret},
+        "screenshot": binary,
+    }
+
+    _store_analysis_result(
+        screen_id,
+        ai_result,
+        component_props={
+            "box": {"x": 10, "y": 20, "w": 5, "h": 4},
+            "authorization": f"Bearer {secret}",
+        },
+        layout_extra={
+            "http_headers": {"X-Custom": secret},
+            "request_headers": {"X-Custom": secret},
+            "api_key": secret,
+            "debug": f"Bearer {secret}",
+        },
+    )
+
+    response = client.get(
+        f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+    draft = response.json()
+    layout = draft["layout"]
+    stored = layout["ai_result"]
+    serialized = json.dumps(draft, ensure_ascii=False)
+
+    assert set(stored) == {"components", "assumptions", "layout"}
+    assert "request_payload" not in stored
+    assert "headers" not in stored
+    assert "screenshot" not in stored
+    assert secret not in serialized
+    assert binary not in serialized
+    assert "base64" not in serialized.lower()
+
+    props = stored["components"][0]["props"]
+    assert props["authorization"] == "[DISEMASKAN]"
+    assert props["nested"]["api_key"] == "[DISEMASKAN]"
+    assert props["nested"]["x_api_key"] == "[DISEMASKAN]"
+    assert "headers" not in props
+    assert "http_headers" not in props
+    assert "response_headers" not in props
+    assert "inlineData" not in props
+    assert stored["components"][1]["props"]["headers"] == ["ID Risiko", "Judul"]
+    assert "http_headers" not in stored["layout"]
+    assert "http_headers" not in layout
+    assert "request_headers" not in layout
+    assert layout["api_key"] == "[DISEMASKAN]"
+    assert layout["debug"] == "Bearer [DISEMASKAN]"
+
+    # Komponen draf memakai jalur penyimpanan yang sama dan tidak boleh
+    # menyimpan credential yang diteruskan melalui props.
+    assert draft["components"][0]["props"]["authorization"] == "[DISEMASKAN]"
+
+
+def test_ai_result_malformed_collections_are_normalized(
+    client: TestClient, auth_headers: dict[str, str], project_id: int
+) -> None:
+    """Bentuk list/dict yang salah dinormalisasi agar panel tetap aman dirender."""
+    screen_id = _make_screen(project_id)
+    _store_analysis_result(
+        screen_id,
+        {
+            "components": {"bukan-list": True},
+            "assumptions": "bukan-list",
+            "layout": ["bukan-dict"],
+        },
+    )
+
+    response = client.get(
+        f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+    stored = response.json()["layout"]["ai_result"]
+
+    assert stored["components"] == []
+    assert stored["assumptions"] == []
+    assert stored["layout"] == {}
+
+
+def test_malformed_component_types_are_not_promoted_to_buttons(
+    client: TestClient, auth_headers: dict[str, str], project_id: int
+) -> None:
+    """Tipe kosong/tidak ada tidak boleh berubah menjadi komponen generator action."""
+    screen_id = _make_screen(project_id)
+    _store_analysis_result(
+        screen_id,
+        {
+            "components": [
+                {"component_type": "", "label": "Tipe kosong"},
+                {"label": "Tipe hilang"},
+                {"component_type": "unsupported", "label": "Tipe tidak didukung"},
+            ],
+            "assumptions": [],
+            "layout": {},
+        },
+        analysis_components=[
+            {
+                "region": "main",
+                "component_type": "",
+                "label": "Tipe kosong",
+                "props": {"box": {"x": 1, "y": 1, "w": 1, "h": 1}},
+                "source": "ai-vision",
+            },
+            {
+                "region": "main",
+                "label": "Tipe hilang",
+                "props": {"box": {"x": 2, "y": 2, "w": 1, "h": 1}},
+                "source": "ai-vision",
+            },
+            {
+                "region": "main",
+                "component_type": "unsupported",
+                "label": "Tipe tidak didukung",
+                "props": {"box": {"x": 3, "y": 3, "w": 1, "h": 1}},
+                "source": "ai-vision",
+            },
+        ],
+    )
+
+    response = client.get(
+        f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+    components = response.json()["components"]
+
+    assert [component["component_type"] for component in components] == ["unsupported"]
+    assert all(component["component_type"] != "button" for component in components)
+
+
+def test_ai_error_redacts_configured_api_key(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    project_id: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """API key yang ikut muncul pada pesan error tidak disimpan ke metadata."""
+    from app.core.config import settings
+
+    screen_id = _make_screen(project_id)
+    secret = "secret-error-key-must-not-persist"
+    monkeypatch.setattr(settings, "gemini_api_key", secret)
+
+    _store_analysis_result(
+        screen_id,
+        None,
+        status="failed",
+        source="rule-engine",
+        ai_error=f"Gemini gagal memakai credential {secret}",
+    )
+
+    response = client.get(
+        f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+    layout = response.json()["layout"]
+    serialized = json.dumps(layout, ensure_ascii=False)
+
+    assert secret not in serialized
+    assert "[DISEMASKAN]" in layout["ai_error"]
 

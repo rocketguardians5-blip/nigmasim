@@ -99,6 +99,8 @@ class AIAnalyzeResponse(BaseModel):
     assumptions_added: int
     layout_updated: bool
     message: str
+    status: str
+    error: str | None = None
 
 
 class HotspotStateIn(BaseModel):

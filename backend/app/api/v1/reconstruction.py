@@ -211,18 +211,24 @@ async def ai_analyze_screen(
     db.commit()
 
     model_label = analysis.ai_model or settings.gemini_model
-    message = (
-        f"AI Vision ({model_label}) selesai: +{new_components} komponen, "
-        f"+{new_assumptions} asumsi masuk ke layer Otomatis."
-    )
-    if manual_preserved:
-        message += f" {manual_preserved} hotspot manual tetap utuh."
+    if analysis.ai_status == "success":
+        message = (
+            f"AI Vision ({model_label}) selesai: +{new_components} komponen, "
+            f"+{new_assumptions} asumsi masuk ke layer Otomatis."
+        )
+        if manual_preserved:
+            message += f" {manual_preserved} hotspot manual tetap utuh."
+    else:
+        detail = analysis.ai_error or "Analisis AI tidak menghasilkan hasil."
+        message = f"AI Vision ({model_label}) gagal: {detail}"
 
     return AIAnalyzeResponse(
         components_added=new_components,
         assumptions_added=new_assumptions,
         layout_updated=bool(analysis.layout.get("regions")),
         message=message,
+        status=analysis.ai_status,
+        error=analysis.ai_error or None,
     )
 
 

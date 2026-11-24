@@ -4,12 +4,19 @@ Dokumen ini dihasilkan otomatis oleh NigmaSim Simulation Generator.
 Simulasi dibangun HANYA dari rekonstruksi yang sudah disetujui manusia.
 
 - Slug: `demo-client-api-nigma`
-- Dibuat: 2026-11-23T03:40:02Z
-- Layar dibuat: 2
-- Layar gagal: 2
+- Dibuat: 2026-11-23T05:26:00Z
+- Layar dibuat: 3
+- Layar gagal: 1
 - Versi layar dilewati: 2
 
 ## Asumsi per layar
+
+### API Nigma Portal (`/login`)
+
+- **[low] Aturan bisnis** (sudah ditinjau): Aturan bisnis TIDAK bisa dibaca dari tampilan. Semua aturan wajib diisi manual oleh pemilik proses.
+- **[high] Layout** (sudah ditinjau): Halaman login terpusat (single-card layout) dengan latar belakang bernuansa terang dan lembut.
+- **[high] Komponen** (sudah ditinjau): Tersedia tombol auto-fill demo untuk mempercepat pengisian akun pengujian default.
+- **[high] Aturan bisnis** (sudah ditinjau): Kredensial bawaan admin@nigma.id / password dapat digunakan untuk login ke portal.
 
 ### Dashboard Overview - API Nigma Portal - Developer API Gateway (`/dashboard`)
 
@@ -33,7 +40,6 @@ Simulasi dibangun HANYA dari rekonstruksi yang sudah disetujui manusia.
 
 ## Layar yang gagal dibuat
 
-- **Masuk ke Portal - API Nigma**: Rekonstruksi tidak punya komponen atau section yang bisa dipakai.
 - **API Playground - Interactive HTTP Client - Developer API Gateway**: Rekonstruksi tidak punya komponen atau section yang bisa dipakai.
 
 ## Versi layar yang dilewati

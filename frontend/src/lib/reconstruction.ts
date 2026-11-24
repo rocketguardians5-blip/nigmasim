@@ -22,6 +22,78 @@ export interface ReconstructionAssumption {
   resolved_at: string | null
 }
 
+export interface AIResultBox {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+export interface AIResultComponent {
+  region?: string
+  component_type?: string
+  label?: string | null
+  props?: {
+    box?: AIResultBox
+    confidence?: number | string
+    [key: string]: unknown
+  } | null
+  box?: AIResultBox
+  source?: 'ai-vision' | 'manual' | 'detected' | string
+  confidence?: number | string | null
+  [key: string]: unknown
+}
+
+export interface AIResultAssumption {
+  topic?: string
+  description?: string
+  confidence?: 'high' | 'medium' | 'low' | string
+  [key: string]: unknown
+}
+
+export interface AIResultSection {
+  index?: number
+  label?: string
+  name?: string
+  types?: string[]
+  item_count?: number
+  items?: Array<{ type?: string; label?: string | null }>
+  [key: string]: unknown
+}
+
+export interface AIResultLayout {
+  regions?: {
+    sidebar?: (AIResultBox & { item_count?: number }) | null
+    header?: AIResultBox | null
+    main?: AIResultBox | null
+  }
+  has_sidebar?: boolean
+  has_header?: boolean
+  sections?: AIResultSection[]
+  [key: string]: unknown
+}
+
+export interface AIResult {
+  components?: AIResultComponent[]
+  assumptions?: AIResultAssumption[]
+  layout?: AIResultLayout
+  [key: string]: unknown
+}
+
+export interface ReconstructionSection {
+  index: number
+  label: string
+  types: string[]
+  top: number
+  bottom: number
+  height: number
+  x: number
+  width: number
+  width_ratio: number
+  item_count: number
+  items: Array<{ type: string; label?: string | null }>
+}
+
 export interface Reconstruction {
   id: number
   screen_id: number
@@ -30,18 +102,23 @@ export interface Reconstruction {
   layout: {
     viewport?: { width: number; height: number }
     regions?: {
-      sidebar?: { x: number; y: number; w: number; h: number } | null
+      sidebar?: ({ x: number; y: number; w: number; h: number } & { item_count?: number }) | null
       header?: { x: number; y: number; w: number; h: number } | null
       main?: { x: number; y: number; w: number; h: number } | null
     }
     has_sidebar?: boolean
     has_header?: boolean
+    sections?: ReconstructionSection[]
     tombstones?: string[]
     overrides?: Record<string, any>
-    ai_status?: string
+    ai_status?: 'success' | 'failed' | 'not_configured'
     ai_model?: string
     ai_error?: string
-    ai_source?: 'hybrid' | 'fallback' | 'rule-engine'
+    ai_source?: 'hybrid' | 'fallback' | 'rule-engine' | 'ai-vision'
+    ai_analyzed_at?: string
+    ai_result?: AIResult | null
+    ai_result_truncated?: boolean
+    ai_result_size_bytes?: number
   } | null
   code_text: string | null
   generated_by: string
@@ -72,6 +149,8 @@ export interface AIAnalyzeResponse {
   assumptions_added: number
   layout_updated: boolean
   message: string
+  status: 'success' | 'failed' | 'not_configured'
+  error?: string | null
 }
 
 export interface UsabilityCheckResult {

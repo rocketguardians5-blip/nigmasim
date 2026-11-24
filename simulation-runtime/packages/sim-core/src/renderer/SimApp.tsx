@@ -210,27 +210,54 @@ function AppLayout({ definition }: { definition: SimAppDefinition }) {
   )
 }
 
-function AuthPage({ page, definition }: { page: SimPage; definition: SimAppDefinition }) {
+/** Latar layar auth: gradasi lembut dua warna pucat (hardcode sementara). */
+const AUTH_BACKGROUND = 'linear-gradient(135deg, #f8fafc 0%, #eef2ff 45%, #ecfeff 100%)'
+
+/** Ikon panah untuk tombol submit layar auth (inline, tanpa dependency). */
+function ArrowRightIcon() {
   return (
-    <div className="grid min-h-full place-items-center bg-slate-50 px-4 py-10">
-      <div className="w-full max-w-md space-y-4">
+    <svg
+      viewBox="0 0 24 24"
+      className="h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      aria-hidden="true"
+    >
+      <path d="M5 12h14M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function AuthPage({ page, definition }: { page: SimPage; definition: SimAppDefinition }) {
+  const title = page.title || definition.brand || definition.name
+  return (
+    <div
+      className="grid min-h-full place-items-center px-4 py-10"
+      style={{ backgroundImage: AUTH_BACKGROUND }}
+    >
+      <div className="w-full max-w-[26rem] space-y-5">
         <div className="text-center">
           <span className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-brand-500 text-white">
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
               <path d="M6 18V6l6 7 6-7v12" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </span>
-          <p className="mt-2 text-[15px] font-semibold text-slate-900">
-            {definition.brand ?? definition.name}
-          </p>
-          <p className="text-[11px] text-slate-500">Simulasi — tidak ada autentikasi nyata</p>
+          <h1 className="mt-3 text-[17px] font-semibold text-slate-900">{title}</h1>
+          {page.subtitle ? (
+            <p className="mt-1 text-[12px] text-slate-500">{page.subtitle}</p>
+          ) : null}
         </div>
 
         <div data-testid={`page-${page.key}`} className="space-y-4">
           {page.sections.map((section, index) => (
-            <SectionView key={`${section.type}-${index}`} section={section} />
+            <SectionView key={`${section.type}-${index}`} section={section} layout="auth" />
           ))}
         </div>
+
+        <p className="text-center text-[11px] text-slate-400">
+          Simulasi, tidak ada autentikasi nyata
+        </p>
       </div>
     </div>
   )
@@ -253,7 +280,13 @@ function PageView({ page, definition }: { page: SimPage; definition: SimAppDefin
   )
 }
 
-function SectionView({ section }: { section: SimSection }) {
+function SectionView({
+  section,
+  layout,
+}: {
+  section: SimSection
+  layout?: 'default' | 'auth'
+}) {
   switch (section.type) {
     case 'stats':
       return <StatsSection section={section} />
@@ -262,7 +295,7 @@ function SectionView({ section }: { section: SimSection }) {
     case 'actions':
       return <ActionsSection section={section} />
     case 'form':
-      return <FormSection section={section} />
+      return <FormSection section={section} auth={layout === 'auth'} />
     case 'table':
       return <TableSection section={section} />
     case 'list':
@@ -307,24 +340,33 @@ function ActionsSection({ section }: { section: Extract<SimSection, { type: 'act
     if (action.navigateTo) navigate(action.navigateTo)
   }
 
-  return (
-    <Card title={section.title}>
-      <div className="flex flex-wrap gap-2">
-        {section.items.map((action) => (
-          <Button
-            key={action.label}
-            variant={action.variant ?? 'secondary'}
-            onClick={() => handleClick(action)}
-          >
-            {action.label}
-          </Button>
-        ))}
-      </div>
-    </Card>
+  const items = (
+    <div className="flex flex-wrap gap-2">
+      {section.items.map((action) => (
+        <Button
+          key={action.label}
+          variant={action.variant ?? 'secondary'}
+          onClick={() => handleClick(action)}
+        >
+          {action.label}
+        </Button>
+      ))}
+    </div>
   )
+
+  // Tanpa title, section tidak dibungkus Card (tanpa kotak tambahan).
+  if (!section.title) return items
+
+  return <Card title={section.title}>{items}</Card>
 }
 
-function FormSection({ section }: { section: Extract<SimSection, { type: 'form' }> }) {
+function FormSection({
+  section,
+  auth,
+}: {
+  section: Extract<SimSection, { type: 'form' }>
+  auth?: boolean
+}) {
   const toast = useToast()
   const navigate = useNavigate()
   const store = useOptionalDatasetStore(section.dataset)
@@ -364,25 +406,65 @@ function FormSection({ section }: { section: Extract<SimSection, { type: 'form' 
     toast('Isi otomatis dari asumsi rekonstruksi diterapkan.', 'info')
   }
 
+  const handleLinkRight = useCallback(() => {
+    const link = section.linkRight
+    if (!link) return
+    toast(`Aksi simulasi: ${link.action ?? link.label}.`, 'info')
+  }, [section.linkRight, toast])
+
   return (
-    <Card title={section.title} description={section.description}>
+    <Card
+      title={auth ? undefined : section.title}
+      description={auth ? undefined : section.description}
+      className={auth ? 'p-5' : undefined}
+    >
       <form onSubmit={handleSubmit} data-testid="sim-form" className="space-y-4">
         <FieldGrid
           fields={section.fields}
           values={values}
           errors={errors}
           onChange={setValue}
+          stacked={auth}
+          linkRight={section.linkRight}
+          onLinkRight={handleLinkRight}
         />
-        <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-          <Button type="submit" variant="primary" data-testid="sim-form-submit">
-            {section.submitLabel}
-          </Button>
-          {section.prefill && (
-            <Button type="button" variant="secondary" onClick={applyPrefill}>
-              {section.prefill.label}
+        {auth ? (
+          <div className="space-y-3">
+            <Button
+              type="submit"
+              variant="dark"
+              className="w-full"
+              data-testid="sim-form-submit"
+            >
+              <span>{section.submitLabel}</span>
+              <ArrowRightIcon />
             </Button>
-          )}
-        </div>
+            {section.prefill ? (
+              <div className="flex justify-center">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  shape="pill"
+                  onClick={applyPrefill}
+                >
+                  {section.prefill.label}
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+            <Button type="submit" variant="primary" data-testid="sim-form-submit">
+              {section.submitLabel}
+            </Button>
+            {section.prefill && (
+              <Button type="button" variant="secondary" onClick={applyPrefill}>
+                {section.prefill.label}
+              </Button>
+            )}
+          </div>
+        )}
       </form>
     </Card>
   )
