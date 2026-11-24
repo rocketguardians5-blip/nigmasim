@@ -2083,5 +2083,207 @@ def test_store_analysis_preserves_layout_theme_and_header(
     assert "comp_1" in layout["overrides"]
 
 
+@respx.mock
+@pytest.mark.asyncio
+async def test_ai_vision_prompt_includes_dom_summary_and_receives_node_id(
+    project_id: int, monkeypatch: pytest.MonkeyPatch
+):
+    """Commit 4: Ringkasan kompak DOM dikirim ke AI Vision dan node_id diproses sebagai prioritas."""
+    from app.core.config import settings
+    from app.services.reconstructor import analyze_with_ai, Analysis
+    from app.models.capture import Screen
+
+    monkeypatch.setattr(settings, "gemini_api_key", "test-api-key")
+    monkeypatch.setattr(settings, "gemini_model", "gemini-3.6-flash")
+    monkeypatch.setattr(settings, "gemini_allow_fallback", False)
+    monkeypatch.setattr(settings, "gemini_max_retries", 0)
+
+    screen_id = _make_screen(project_id, screen_key="screen-dom-summary")
+    _make_test_screenshot(screen_id)
+
+    visual_tree = {
+        "viewport": {"w": 1440, "h": 900},
+        "page": {"backgroundColor": "#fafafa"},
+        "nodes": [
+            {
+                "id": "dom_btn_99",
+                "tag": "button",
+                "text": "Simpan Perubahan",
+                "inputType": "submit",
+                "box": {"x": 100, "y": 200, "w": 250, "h": 50},
+                "style": {"backgroundColor": "rgb(37, 99, 235)"},
+            },
+            {
+                "id": "dom_inp_10",
+                "tag": "input",
+                "placeholder": "Ketik nama",
+                "inputType": "text",
+                "box": {"x": 100, "y": 120, "w": 300, "h": 40},
+            },
+        ],
+    }
+
+    with SessionLocal() as db:
+        screen = db.get(Screen, screen_id)
+        assert screen is not None
+        screen.structure = {
+            "viewport": {"width": 1440, "height": 900},
+            "visual": visual_tree,
+        }
+        db.commit()
+
+    captured_prompt = ""
+
+    def mock_gemini_handler(request):
+        nonlocal captured_prompt
+        req_json = json.loads(request.content)
+        parts = req_json["contents"][0]["parts"]
+        captured_prompt = parts[0]["text"]
+
+        response_data = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [
+                            {
+                                "text": json.dumps(
+                                    {
+                                        "components": [
+                                            {
+                                                "node_id": "dom_btn_99",
+                                                "region": "main",
+                                                "component_type": "button",
+                                                "label": "Tebakan Label AI",
+                                                "props": {
+                                                    "box": {
+                                                        "x": 6.9,
+                                                        "y": 22.2,
+                                                        "w": 17.4,
+                                                        "h": 5.6,
+                                                    }
+                                                },
+                                                "source": "ai-vision",
+                                            },
+                                            {
+                                                "node_id": "node_invalid_999",
+                                                "region": "main",
+                                                "component_type": "button",
+                                                "label": "Tombol Lain",
+                                                "props": {
+                                                    "box": {
+                                                        "x": 50.0,
+                                                        "y": 50.0,
+                                                        "w": 10.0,
+                                                        "h": 5.0,
+                                                    }
+                                                },
+                                                "source": "ai-vision",
+                                            },
+                                        ],
+                                        "assumptions": [],
+                                        "layout": {"has_sidebar": False},
+                                    }
+                                )
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+        return httpx.Response(200, json=response_data)
+
+    route = respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
+    ).mock(side_effect=mock_gemini_handler)
+
+    with SessionLocal() as db:
+        screen = db.get(Screen, screen_id)
+        assert screen is not None
+        analysis = await analyze_with_ai(screen, Analysis())
+
+    assert route.called
+    # 1. Prompt AI Vision mengandung ringkasan DOM dan petunjuk node_id
+    assert "RINGKASAN ELEMEN DOM ASLI" in captured_prompt
+    assert "dom_btn_99" in captured_prompt
+    assert "Simpan Perubahan" in captured_prompt
+    assert "sumber kebenaran" in captured_prompt
+    assert "node_id" in captured_prompt
+
+    # 2. Komponen dengan node_id valid langsung cocok dengan node DOM tersebut dan teks asli menang
+    matched_btn = next((c for c in analysis.components if c.get("component_type") == "button"), None)
+    assert matched_btn is not None
+    assert matched_btn["props"]["dom"]["node_id"] == "dom_btn_99"
+    assert matched_btn["label"] == "Simpan Perubahan"
+    assert matched_btn["props"]["label_source"] == "dom"
+    assert matched_btn["props"]["label_guess"] == "Tebakan Label AI"
+
+    # 3. node_id invalid (node_invalid_999) tidak menyebabkan error
+    invalid_btn = next((c for c in analysis.components if c.get("label") == "Tombol Lain"), None)
+    assert invalid_btn is not None
+    assert "dom" not in invalid_btn.get("props", {})
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_ai_vision_prompt_without_visual_tree_unchanged(
+    project_id: int, monkeypatch: pytest.MonkeyPatch
+):
+    """Prompt AI Vision tetap normal jika visual tree tidak ada."""
+    from app.core.config import settings
+    from app.services.reconstructor import analyze_with_ai, Analysis
+    from app.models.capture import Screen
+
+    monkeypatch.setattr(settings, "gemini_api_key", "test-api-key")
+    monkeypatch.setattr(settings, "gemini_model", "gemini-3.6-flash")
+    monkeypatch.setattr(settings, "gemini_allow_fallback", False)
+    monkeypatch.setattr(settings, "gemini_max_retries", 0)
+
+    screen_id = _make_screen(project_id, screen_key="screen-no-visual")
+    _make_test_screenshot(screen_id)
+
+    with SessionLocal() as db:
+        screen = db.get(Screen, screen_id)
+        assert screen is not None
+        screen.structure = {"viewport": {"width": 1440, "height": 900}}
+        db.commit()
+
+    captured_prompt = ""
+
+    def mock_gemini_handler(request):
+        nonlocal captured_prompt
+        req_json = json.loads(request.content)
+        parts = req_json["contents"][0]["parts"]
+        captured_prompt = parts[0]["text"]
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "text": json.dumps(
+                                        {"components": [], "assumptions": []}
+                                    )
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+        )
+
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent"
+    ).mock(side_effect=mock_gemini_handler)
+
+    with SessionLocal() as db:
+        screen = db.get(Screen, screen_id)
+        assert screen is not None
+        await analyze_with_ai(screen, Analysis())
+
+    assert "RINGKASAN ELEMEN DOM ASLI" not in captured_prompt
+
+
 
 

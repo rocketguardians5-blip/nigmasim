@@ -574,6 +574,9 @@ def _safe_table_headers(value: Any) -> list[str] | None:
 def _sanitize_result_component(value: dict[str, Any]) -> dict[str, Any]:
     cleaned = _sanitize_result_value(value)
 
+    if "node_id" in value and isinstance(value.get("node_id"), str):
+        cleaned["node_id"] = _redact_sensitive_text(value["node_id"])
+
     for key in ("region", "component_type", "source"):
         if key in value and not isinstance(value.get(key), str):
             cleaned.pop(key, None)
@@ -1437,6 +1440,7 @@ OUTPUT FORMAT (JSON only, no markdown):
 {
   "components": [
     {
+      "node_id": "string (opsional: isi bila cocok dengan id node dari ringkasan DOM)",
       "region": "header|sidebar|main|footer",
       "component_type": "button|link|input|select|textarea|heading|table|card|image|nav-item|header-item|field|form|icon|logo|dropdown",
       "label": "string (deskriptif, bahasa Indonesia, mis: 'Tombol Buy Now', 'Menu HOME', 'Field Email', 'Kartu Fitur HDMI')",
@@ -1687,9 +1691,63 @@ KONTEKS:
 
 TUGAS: Deteksi SEMUA elemen interaktif yang terlihat di screenshot ini.
 Prioritas: tombol, link navigasi, input, dropdown, logo yang bisa diklik, kartu, gambar interaktif, tabel.
-Hindari duplikat dengan {existing_count} komponen yang sudah ada.
+Hindari duplikat dengan {existing_count} komponen yang sudah ada."""
 
-Output HANYA JSON valid sesuai format di system prompt."""
+    # Jika struktur visual DOM tersedia, sertakan ringkasan kompak sebagai sumber kebenaran teks
+    if "visual" in structure and isinstance(structure["visual"], dict):
+        visual_nodes = structure["visual"].get("nodes")
+        if isinstance(visual_nodes, list):
+            summary_nodes = []
+            for n in visual_nodes:
+                if not isinstance(n, dict):
+                    continue
+                nid = n.get("id")
+                if not nid:
+                    continue
+                tag = n.get("tag") or ""
+                raw_text = n.get("text")
+                clean_text = _redact_sensitive_text(str(raw_text).strip()) if raw_text else None
+                if clean_text and len(clean_text) > 60:
+                    clean_text = clean_text[:57] + "..."
+                raw_ph = n.get("placeholder")
+                clean_ph = _redact_sensitive_text(str(raw_ph).strip()) if raw_ph else None
+                itype = n.get("inputType")
+                nbox = n.get("box")
+
+                item: dict[str, Any] = {"id": nid, "tag": tag}
+                if clean_text:
+                    item["text"] = clean_text
+                if clean_ph:
+                    item["placeholder"] = clean_ph
+                if itype:
+                    item["inputType"] = itype
+                if nbox and isinstance(nbox, dict):
+                    item["box"] = {
+                        "x": nbox.get("x", 0),
+                        "y": nbox.get("y", 0),
+                        "w": nbox.get("w", 0),
+                        "h": nbox.get("h", 0),
+                    }
+                summary_nodes.append(item)
+                if len(summary_nodes) >= 80:
+                    break
+
+            summary_json = json.dumps(summary_nodes, ensure_ascii=False)
+            if len(summary_json.encode("utf-8")) > 6144:
+                while summary_nodes and len(json.dumps(summary_nodes, ensure_ascii=False).encode("utf-8")) > 6144:
+                    summary_nodes.pop()
+                summary_json = json.dumps(summary_nodes, ensure_ascii=False)
+
+            prompt += f"""
+
+RINGKASAN ELEMEN DOM ASLI ({len(summary_nodes)} node):
+{summary_json}
+
+PETUNJUK DOM:
+- Teks pada daftar DOM di atas adalah sumber kebenaran (ground truth). Jangan mengubah, mengarang, atau salah mengeja teks elemen.
+- Untuk setiap komponen yang kamu laporkan, isi field 'node_id' bila cocok dengan salah satu id node dari daftar DOM di atas."""
+
+    prompt += "\n\nOutput HANYA JSON valid sesuai format di system prompt."
 
     try:
         payload = {
