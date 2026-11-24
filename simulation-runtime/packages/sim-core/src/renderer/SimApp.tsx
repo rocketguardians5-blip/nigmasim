@@ -231,10 +231,31 @@ function ArrowRightIcon() {
 
 function AuthPage({ page, definition }: { page: SimPage; definition: SimAppDefinition }) {
   const title = page.title || definition.brand || definition.name
+  const theme = page.theme
+  const pageBg = theme?.page?.backgroundColor
+  const pageFont = theme?.page?.fontFamily
+
+  const containerStyle: React.CSSProperties = {
+    fontFamily: pageFont,
+    ...(pageBg ? { backgroundColor: pageBg } : { backgroundImage: AUTH_BACKGROUND }),
+  }
+
+  const headingStyle: React.CSSProperties = {
+    color: theme?.text?.heading?.color,
+    fontSize: theme?.text?.heading?.fontSize,
+    fontWeight: theme?.text?.heading?.fontWeight,
+  }
+
+  const bodyStyle: React.CSSProperties = {
+    color: theme?.text?.body?.color,
+    fontSize: theme?.text?.body?.fontSize,
+    fontWeight: theme?.text?.body?.fontWeight,
+  }
+
   return (
     <div
       className="grid min-h-full place-items-center px-4 py-10"
-      style={{ backgroundImage: AUTH_BACKGROUND }}
+      style={containerStyle}
     >
       <div className="w-full max-w-[26rem] space-y-5">
         <div className="text-center">
@@ -243,15 +264,20 @@ function AuthPage({ page, definition }: { page: SimPage; definition: SimAppDefin
               <path d="M6 18V6l6 7 6-7v12" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </span>
-          <h1 className="mt-3 text-[17px] font-semibold text-slate-900">{title}</h1>
+          <h1 className="mt-3 text-[17px] font-semibold text-slate-900" style={headingStyle}>{title}</h1>
           {page.subtitle ? (
-            <p className="mt-1 text-[12px] text-slate-500">{page.subtitle}</p>
+            <p className="mt-1 text-[12px] text-slate-500" style={bodyStyle}>{page.subtitle}</p>
           ) : null}
         </div>
 
         <div data-testid={`page-${page.key}`} className="space-y-4">
           {page.sections.map((section, index) => (
-            <SectionView key={`${section.type}-${index}`} section={section} layout="auth" />
+            <SectionView
+              key={`${section.type}-${index}`}
+              section={section}
+              layout="auth"
+              theme={theme}
+            />
           ))}
         </div>
 
@@ -264,11 +290,22 @@ function AuthPage({ page, definition }: { page: SimPage; definition: SimAppDefin
 }
 
 function PageView({ page, definition }: { page: SimPage; definition: SimAppDefinition }) {
+  const theme = page.theme
+  const pageFont = theme?.page?.fontFamily
+
   return (
-    <div data-testid={`page-${page.key}`} className="space-y-4">
+    <div
+      data-testid={`page-${page.key}`}
+      className="space-y-4"
+      style={{ fontFamily: pageFont }}
+    >
       <PageHeader title={page.title} description={page.subtitle} />
       {page.sections.map((section, index) => (
-        <SectionView key={`${section.type}-${index}`} section={section} />
+        <SectionView
+          key={`${section.type}-${index}`}
+          section={section}
+          theme={theme}
+        />
       ))}
       {page.sections.length === 0 && (
         <EmptyState
@@ -283,33 +320,50 @@ function PageView({ page, definition }: { page: SimPage; definition: SimAppDefin
 function SectionView({
   section,
   layout,
+  theme,
 }: {
   section: SimSection
   layout?: 'default' | 'auth'
+  theme?: SimPage['theme']
 }) {
   switch (section.type) {
     case 'stats':
-      return <StatsSection section={section} />
+      return <StatsSection section={section} theme={theme} />
     case 'text':
-      return <TextSection section={section} />
+      return <TextSection section={section} theme={theme} />
     case 'actions':
-      return <ActionsSection section={section} />
+      return <ActionsSection section={section} theme={theme} />
     case 'form':
-      return <FormSection section={section} auth={layout === 'auth'} />
+      return <FormSection section={section} auth={layout === 'auth'} theme={theme} />
     case 'table':
-      return <TableSection section={section} />
+      return <TableSection section={section} theme={theme} />
     case 'list':
-      return <ListSection section={section} />
+      return <ListSection section={section} theme={theme} />
     case 'code':
-      return <CodeSection section={section} />
+      return <CodeSection section={section} theme={theme} />
     default:
       return null
   }
 }
 
-function StatsSection({ section }: { section: Extract<SimSection, { type: 'stats' }> }) {
+function StatsSection({
+  section,
+  theme,
+}: {
+  section: Extract<SimSection, { type: 'stats' }>
+  theme?: SimPage['theme']
+}) {
+  const cardStyle: React.CSSProperties = {
+    backgroundColor: theme?.card?.backgroundColor,
+    borderColor: theme?.card?.borderColor,
+    borderRadius: theme?.card?.borderRadius,
+    boxShadow: theme?.card?.boxShadow,
+    padding: theme?.card?.padding,
+    ...section.style,
+  }
+
   return (
-    <Card title={section.title}>
+    <Card title={section.title} style={cardStyle}>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {section.items.map((item) => (
           <div key={`${item.label}-${item.value}`} className="rounded-lg border border-slate-200 p-3">
@@ -323,15 +377,44 @@ function StatsSection({ section }: { section: Extract<SimSection, { type: 'stats
   )
 }
 
-function TextSection({ section }: { section: Extract<SimSection, { type: 'text' }> }) {
+function TextSection({
+  section,
+  theme,
+}: {
+  section: Extract<SimSection, { type: 'text' }>
+  theme?: SimPage['theme']
+}) {
+  const cardStyle: React.CSSProperties = {
+    backgroundColor: theme?.card?.backgroundColor,
+    borderColor: theme?.card?.borderColor,
+    borderRadius: theme?.card?.borderRadius,
+    boxShadow: theme?.card?.boxShadow,
+    padding: theme?.card?.padding,
+    ...section.style,
+  }
+
+  const textStyle: React.CSSProperties = {
+    color: theme?.text?.body?.color,
+    fontSize: theme?.text?.body?.fontSize,
+    fontWeight: theme?.text?.body?.fontWeight,
+  }
+
   return (
-    <Card title={section.title}>
-      <p className="whitespace-pre-line text-[13px] leading-relaxed text-slate-600">{section.body}</p>
+    <Card title={section.title} style={cardStyle}>
+      <p className="whitespace-pre-line text-[13px] leading-relaxed text-slate-600" style={textStyle}>
+        {section.body}
+      </p>
     </Card>
   )
 }
 
-function ActionsSection({ section }: { section: Extract<SimSection, { type: 'actions' }> }) {
+function ActionsSection({
+  section,
+  theme,
+}: {
+  section: Extract<SimSection, { type: 'actions' }>
+  theme?: SimPage['theme']
+}) {
   const toast = useToast()
   const navigate = useNavigate()
 
@@ -340,12 +423,20 @@ function ActionsSection({ section }: { section: Extract<SimSection, { type: 'act
     if (action.navigateTo) navigate(action.navigateTo)
   }
 
+  const primaryBtnStyle: React.CSSProperties = {
+    backgroundColor: theme?.primary?.backgroundColor,
+    color: theme?.primary?.color,
+    borderRadius: theme?.primary?.borderRadius,
+    fontWeight: theme?.primary?.fontWeight,
+  }
+
   const items = (
     <div className="flex flex-wrap gap-2">
       {section.items.map((action) => (
         <Button
           key={action.label}
           variant={action.variant ?? 'secondary'}
+          style={action.variant === 'primary' ? primaryBtnStyle : undefined}
           onClick={() => handleClick(action)}
         >
           {action.label}
@@ -357,15 +448,26 @@ function ActionsSection({ section }: { section: Extract<SimSection, { type: 'act
   // Tanpa title, section tidak dibungkus Card (tanpa kotak tambahan).
   if (!section.title) return items
 
-  return <Card title={section.title}>{items}</Card>
+  const cardStyle: React.CSSProperties = {
+    backgroundColor: theme?.card?.backgroundColor,
+    borderColor: theme?.card?.borderColor,
+    borderRadius: theme?.card?.borderRadius,
+    boxShadow: theme?.card?.boxShadow,
+    padding: theme?.card?.padding,
+    ...section.style,
+  }
+
+  return <Card title={section.title} style={cardStyle}>{items}</Card>
 }
 
 function FormSection({
   section,
   auth,
+  theme,
 }: {
   section: Extract<SimSection, { type: 'form' }>
   auth?: boolean
+  theme?: SimPage['theme']
 }) {
   const toast = useToast()
   const navigate = useNavigate()
@@ -412,11 +514,28 @@ function FormSection({
     toast(`Aksi simulasi: ${link.action ?? link.label}.`, 'info')
   }, [section.linkRight, toast])
 
+  const cardStyle: React.CSSProperties = {
+    backgroundColor: theme?.card?.backgroundColor,
+    borderColor: theme?.card?.borderColor,
+    borderRadius: theme?.card?.borderRadius,
+    boxShadow: theme?.card?.boxShadow,
+    padding: theme?.card?.padding,
+    ...section.style,
+  }
+
+  const primaryBtnStyle: React.CSSProperties = {
+    backgroundColor: theme?.primary?.backgroundColor,
+    color: theme?.primary?.color,
+    borderRadius: theme?.primary?.borderRadius,
+    fontWeight: theme?.primary?.fontWeight,
+  }
+
   return (
     <Card
       title={auth ? undefined : section.title}
       description={auth ? undefined : section.description}
       className={auth ? 'p-5' : undefined}
+      style={cardStyle}
     >
       <form onSubmit={handleSubmit} data-testid="sim-form" className="space-y-4">
         <FieldGrid
@@ -435,6 +554,7 @@ function FormSection({
               variant="dark"
               className="w-full"
               data-testid="sim-form-submit"
+              style={primaryBtnStyle}
             >
               <span>{section.submitLabel}</span>
               <ArrowRightIcon />
@@ -455,7 +575,12 @@ function FormSection({
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
-            <Button type="submit" variant="primary" data-testid="sim-form-submit">
+            <Button
+              type="submit"
+              variant="primary"
+              data-testid="sim-form-submit"
+              style={primaryBtnStyle}
+            >
               {section.submitLabel}
             </Button>
             {section.prefill && (
@@ -470,7 +595,13 @@ function FormSection({
   )
 }
 
-function TableSection({ section }: { section: Extract<SimSection, { type: 'table' }> }) {
+function TableSection({
+  section,
+  theme,
+}: {
+  section: Extract<SimSection, { type: 'table' }>
+  theme?: SimPage['theme']
+}) {
   const toast = useToast()
   const confirm = useConfirm()
   const store = useDatasetStore(section.dataset)
@@ -573,8 +704,24 @@ function TableSection({ section }: { section: Extract<SimSection, { type: 'table
             : undefined,
   }))
 
+  const cardStyle: React.CSSProperties = {
+    backgroundColor: theme?.card?.backgroundColor,
+    borderColor: theme?.card?.borderColor,
+    borderRadius: theme?.card?.borderRadius,
+    boxShadow: theme?.card?.boxShadow,
+    padding: theme?.card?.padding,
+    ...section.style,
+  }
+
+  const primaryBtnStyle: React.CSSProperties = {
+    backgroundColor: theme?.primary?.backgroundColor,
+    color: theme?.primary?.color,
+    borderRadius: theme?.primary?.borderRadius,
+    fontWeight: theme?.primary?.fontWeight,
+  }
+
   return (
-    <Card title={section.title} description={section.description}>
+    <Card title={section.title} description={section.description} style={cardStyle}>
       <div className="space-y-3">
         <div className="flex flex-wrap items-end gap-2">
           <div className="min-w-[200px] flex-1">
@@ -610,7 +757,12 @@ function TableSection({ section }: { section: Extract<SimSection, { type: 'table
             </div>
           ))}
 
-          <Button variant="primary" onClick={openCreate} data-testid={`add-${dataset.key}`}>
+          <Button
+            variant="primary"
+            onClick={openCreate}
+            data-testid={`add-${dataset.key}`}
+            style={primaryBtnStyle}
+          >
             {section.createLabel ?? 'Tambah data'}
           </Button>
         </div>
@@ -625,7 +777,7 @@ function TableSection({ section }: { section: Extract<SimSection, { type: 'table
               title="Belum ada data"
               description="Tambahkan data baru atau ubah kata kunci pencarian."
               action={
-                <Button variant="primary" onClick={openCreate}>
+                <Button variant="primary" onClick={openCreate} style={primaryBtnStyle}>
                   {section.createLabel ?? 'Tambah data'}
                 </Button>
               }
@@ -646,7 +798,12 @@ function TableSection({ section }: { section: Extract<SimSection, { type: 'table
         footer={
           <>
             <Button onClick={() => setModalOpen(false)}>Batal</Button>
-            <Button variant="primary" onClick={save} data-testid={`save-${dataset.key}`}>
+            <Button
+              variant="primary"
+              onClick={save}
+              data-testid={`save-${dataset.key}`}
+              style={primaryBtnStyle}
+            >
               Simpan
             </Button>
           </>
@@ -672,9 +829,24 @@ function TableSection({ section }: { section: Extract<SimSection, { type: 'table
   )
 }
 
-function ListSection({ section }: { section: Extract<SimSection, { type: 'list' }> }) {
+function ListSection({
+  section,
+  theme,
+}: {
+  section: Extract<SimSection, { type: 'list' }>
+  theme?: SimPage['theme']
+}) {
+  const cardStyle: React.CSSProperties = {
+    backgroundColor: theme?.card?.backgroundColor,
+    borderColor: theme?.card?.borderColor,
+    borderRadius: theme?.card?.borderRadius,
+    boxShadow: theme?.card?.boxShadow,
+    padding: theme?.card?.padding,
+    ...section.style,
+  }
+
   return (
-    <Card title={section.title} description={section.description}>
+    <Card title={section.title} description={section.description} style={cardStyle}>
       <ul className="divide-y divide-slate-100">
         {section.items.map((item) => (
           <li key={item.label} className="flex items-center justify-between gap-3 py-2.5">
@@ -687,9 +859,24 @@ function ListSection({ section }: { section: Extract<SimSection, { type: 'list' 
   )
 }
 
-function CodeSection({ section }: { section: Extract<SimSection, { type: 'code' }> }) {
+function CodeSection({
+  section,
+  theme,
+}: {
+  section: Extract<SimSection, { type: 'code' }>
+  theme?: SimPage['theme']
+}) {
+  const cardStyle: React.CSSProperties = {
+    backgroundColor: theme?.card?.backgroundColor,
+    borderColor: theme?.card?.borderColor,
+    borderRadius: theme?.card?.borderRadius,
+    boxShadow: theme?.card?.boxShadow,
+    padding: theme?.card?.padding,
+    ...section.style,
+  }
+
   return (
-    <Card title={section.title}>
+    <Card title={section.title} style={cardStyle}>
       <pre className="overflow-x-auto rounded-lg bg-slate-900 p-4 text-[12px] leading-relaxed text-slate-100">
         <code>{section.body}</code>
       </pre>

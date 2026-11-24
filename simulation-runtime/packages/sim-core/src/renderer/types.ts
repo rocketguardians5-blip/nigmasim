@@ -23,6 +23,40 @@ export interface SimOption {
   parent?: string
 }
 
+export interface SimVisualTheme {
+  page?: {
+    backgroundColor?: string
+    fontFamily?: string
+  }
+  card?: {
+    box?: { x: number; y: number; w: number; h: number }
+    backgroundColor?: string
+    borderColor?: string
+    borderWidth?: string
+    borderRadius?: string
+    boxShadow?: string
+    padding?: string
+  }
+  primary?: {
+    backgroundColor?: string
+    color?: string
+    borderRadius?: string
+    fontWeight?: string | number
+  }
+  text?: {
+    heading?: {
+      color?: string
+      fontSize?: string
+      fontWeight?: string | number
+    }
+    body?: {
+      color?: string
+      fontSize?: string
+      fontWeight?: string | number
+    }
+  }
+}
+
 export interface SimField {
   key: string
   label: string
@@ -40,6 +74,10 @@ export interface SimField {
    * - tidak diisi: otomatis untuk field bertipe `password`.
    */
   toggleVisibility?: boolean
+  /** Gaya visual opsional yang diekstrak dari DOM. */
+  style?: Record<string, string | number>
+  /** SVG string dari DOM untuk ikon field/input. */
+  iconSvg?: string
 }
 
 export interface SimColumn {
@@ -92,9 +130,9 @@ export interface SimLinkRight {
 }
 
 export type SimSection =
-  | { type: 'stats'; title?: string; items: SimStat[] }
-  | { type: 'text'; title?: string; body: string }
-  | { type: 'actions'; title?: string; items: SimAction[] }
+  | { type: 'stats'; title?: string; items: SimStat[]; style?: Record<string, string | number> }
+  | { type: 'text'; title?: string; body: string; style?: Record<string, string | number> }
+  | { type: 'actions'; title?: string; items: SimAction[]; style?: Record<string, string | number> }
   | {
       type: 'form'
       title?: string
@@ -107,6 +145,7 @@ export type SimSection =
       dataset?: string
       /** Tautan opsional di kanan baris checkbox. */
       linkRight?: SimLinkRight
+      style?: Record<string, string | number>
     }
   | {
       type: 'table'
@@ -115,14 +154,16 @@ export type SimSection =
       dataset: string
       filters?: SimTableFilter[]
       createLabel?: string
+      style?: Record<string, string | number>
     }
   | {
       type: 'list'
       title?: string
       description?: string
       items: { label: string; meta?: string }[]
+      style?: Record<string, string | number>
     }
-  | { type: 'code'; title?: string; body: string }
+  | { type: 'code'; title?: string; body: string; style?: Record<string, string | number> }
 
 export interface SimPage {
   key: string
@@ -131,6 +172,8 @@ export interface SimPage {
   subtitle?: string
   kind?: 'auth' | 'dashboard' | 'table' | 'custom'
   sections: SimSection[]
+  /** Tema visual halaman (background, font, card, tombol, teks) */
+  theme?: SimVisualTheme
 }
 
 export interface SimNavItem {

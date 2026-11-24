@@ -20,7 +20,7 @@ export default defineConfig({
   webServer: {
     command: 'npm run build && npm run preview -- --host 127.0.0.1 --port 5180',
     url: 'http://127.0.0.1:5180',
-    reuseExistingServer: false,
+    reuseExistingServer: !process.env.CI,
     timeout: 240_000,
     stdout: 'pipe',
     stderr: 'pipe',

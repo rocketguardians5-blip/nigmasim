@@ -15,6 +15,14 @@
       "description": "Simulasi hidup Api-Nigma — dibangun dari 3 layar rekonstruksi yang disetujui.",
       "path": "/?app=demo-client-api-nigma",
       "accent": "#4268ff"
+    },
+    {
+      "slug": "mock-theme",
+      "name": "Mock Themed App",
+      "icon": "shield",
+      "description": "Aplikasi mock untuk menguji render theme visual.",
+      "path": "/?app=mock-theme",
+      "accent": "#2563eb"
     }
   ]
 }

@@ -33,6 +33,21 @@ export function validateForm(fields: SimField[], values: FormValues): Record<str
   return errors
 }
 
+/** Render SVG icon secara aman dari data URI tanpa dangerouslySetInnerHTML */
+function SafeIcon({ svgString, className }: { svgString?: string; className?: string }) {
+  if (!svgString || !svgString.trim().startsWith('<svg')) return null
+  const encoded = encodeURIComponent(svgString.trim())
+  const dataUri = `data:image/svg+xml;utf8,${encoded}`
+  return (
+    <img
+      src={dataUri}
+      alt=""
+      aria-hidden="true"
+      className={className ?? 'h-4 w-4 shrink-0 object-contain'}
+    />
+  )
+}
+
 /** Ikon mata inline (SVG bawaan, tanpa dependency eksternal). */
 function EyeIcon({ crossed }: { crossed: boolean }) {
   return (
@@ -155,6 +170,11 @@ export function FieldGrid({
           />
         ) : canToggle ? (
           <div className="relative">
+            {field.iconSvg ? (
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                <SafeIcon svgString={field.iconSvg} className="h-4 w-4" />
+              </div>
+            ) : null}
             <input
               id={id}
               type={inputType}
@@ -163,7 +183,8 @@ export function FieldGrid({
               placeholder={field.placeholder}
               aria-invalid={errors?.[field.key] ? true : undefined}
               data-testid={`field-${field.key}`}
-              className="sim-input pr-10"
+              style={field.style as React.CSSProperties | undefined}
+              className={`sim-input pr-10 ${field.iconSvg ? 'pl-9' : ''}`}
             />
             <button
               type="button"
@@ -175,16 +196,24 @@ export function FieldGrid({
             </button>
           </div>
         ) : (
-          <input
-            id={id}
-            type={field.type ?? 'text'}
-            value={String(value ?? '')}
-            onChange={(event) => onChange(field.key, event.target.value)}
-            placeholder={field.placeholder}
-            aria-invalid={errors?.[field.key] ? true : undefined}
-            data-testid={`field-${field.key}`}
-            className="sim-input"
-          />
+          <div className="relative">
+            {field.iconSvg ? (
+              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                <SafeIcon svgString={field.iconSvg} className="h-4 w-4" />
+              </div>
+            ) : null}
+            <input
+              id={id}
+              type={field.type ?? 'text'}
+              value={String(value ?? '')}
+              onChange={(event) => onChange(field.key, event.target.value)}
+              placeholder={field.placeholder}
+              aria-invalid={errors?.[field.key] ? true : undefined}
+              data-testid={`field-${field.key}`}
+              style={field.style as React.CSSProperties | undefined}
+              className={`sim-input ${field.iconSvg ? 'pl-9' : ''}`}
+            />
+          </div>
         )}
       </FormField>
     )
