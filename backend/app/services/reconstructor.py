@@ -491,6 +491,19 @@ def _normalized_result_key(key: Any) -> str:
     return re.sub(r"[^a-z0-9]", "", str(key).lower())
 
 
+def _redact_layout_value(value: Any) -> Any:
+    """Redaksi teks sensitif pada nilai string layout draf tanpa membuang key apa pun."""
+    if isinstance(value, dict):
+        return {str(k): _redact_layout_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact_layout_value(item) for item in value]
+    if isinstance(value, str):
+        return _redact_sensitive_text(value)
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
+
+
 def _sanitize_result_value(value: Any) -> Any:
     """Bersihkan nilai JSON output tanpa mengubah struktur normal Gemini."""
     if isinstance(value, dict):
@@ -796,12 +809,12 @@ def store_analysis(
         return existing
 
     existing_layout_value = (
-        _sanitize_result_value(existing.layout or {}) if existing is not None else {}
+        _redact_layout_value(existing.layout or {}) if existing is not None else {}
     )
     existing_layout = (
         dict(existing_layout_value) if isinstance(existing_layout_value, dict) else {}
     )
-    new_layout_value = _sanitize_result_value(analysis.layout or {})
+    new_layout_value = _redact_layout_value(analysis.layout or {})
     new_layout = dict(new_layout_value) if isinstance(new_layout_value, dict) else {}
     if "tombstones" in existing_layout and "tombstones" not in new_layout:
         new_layout["tombstones"] = existing_layout["tombstones"]

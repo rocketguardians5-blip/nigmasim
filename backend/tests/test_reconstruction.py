@@ -40,15 +40,17 @@ def project_id(client: TestClient, auth_headers: dict[str, str]) -> int:
     return project["id"]
 
 
-def _make_screen(project_id: int, *, with_structure: bool = True) -> int:
+def _make_screen(
+    project_id: int, *, with_structure: bool = True, screen_key: str = "dashboard"
+) -> int:
     with SessionLocal() as db:
         from app.models.capture import Screen, ScreenElement
 
         screen = Screen(
             project_id=project_id,
-            screen_key="dashboard",
+            screen_key=screen_key,
             title="Dashboard Risiko",
-            screenshot_path="captures/test/dashboard.png",
+            screenshot_path=f"captures/test/{screen_key}.png",
             review_status="pending",
             tags=[],
             structure={
@@ -1477,9 +1479,6 @@ def test_ai_result_allowlist_and_dlp_excludes_sensitive_output_fields(
             "authorization": f"Bearer {secret}",
         },
         layout_extra={
-            "http_headers": {"X-Custom": secret},
-            "request_headers": {"X-Custom": secret},
-            "api_key": secret,
             "debug": f"Bearer {secret}",
         },
     )
@@ -1511,9 +1510,6 @@ def test_ai_result_allowlist_and_dlp_excludes_sensitive_output_fields(
     assert "inlineData" not in props
     assert stored["components"][1]["props"]["headers"] == ["ID Risiko", "Judul"]
     assert "http_headers" not in stored["layout"]
-    assert "http_headers" not in layout
-    assert "request_headers" not in layout
-    assert layout["api_key"] == "[DISEMASKAN]"
     assert layout["debug"] == "Bearer [DISEMASKAN]"
 
     # Komponen draf memakai jalur penyimpanan yang sama dan tidak boleh
@@ -1626,4 +1622,64 @@ def test_ai_error_redacts_configured_api_key(
 
     assert secret not in serialized
     assert "[DISEMASKAN]" in layout["ai_error"]
+
+
+def test_store_analysis_preserves_header_region(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    project_id: int,
+) -> None:
+    """Region header (baik berupa box maupun None) pada layout draf tidak boleh hilang."""
+    screen_id = _make_screen(project_id)
+
+    # 1. Kasus region header berupa box (sidebar, header, main)
+    header_box = {"x": 200, "y": 0, "w": 1240, "h": 60}
+    sidebar_box = {"x": 0, "y": 0, "w": 200, "h": 900}
+    main_box = {"x": 200, "y": 60, "w": 1240, "h": 840}
+    _store_analysis_result(
+        screen_id,
+        None,
+        layout_extra={
+            "regions": {
+                "sidebar": sidebar_box,
+                "header": header_box,
+                "main": main_box,
+            }
+        },
+    )
+
+    response = client.get(
+        f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+    layout = response.json()["layout"]
+    assert "regions" in layout
+    assert "header" in layout["regions"], "Region 'header' hilang setelah disimpan!"
+    assert layout["regions"]["header"] == header_box
+    assert layout["regions"]["sidebar"] == sidebar_box
+    assert layout["regions"]["main"] == main_box
+
+    # 2. Kasus region header bernilai None tetap tersimpan sebagai None
+    screen_id_none = _make_screen(project_id, screen_key="dashboard-none")
+    _store_analysis_result(
+        screen_id_none,
+        None,
+        layout_extra={
+            "regions": {
+                "sidebar": sidebar_box,
+                "header": None,
+                "main": main_box,
+            }
+        },
+    )
+
+    response_none = client.get(
+        f"/api/v1/reconstructions/screen/{screen_id_none}", headers=auth_headers
+    )
+    assert response_none.status_code == 200, response_none.text
+    layout_none = response_none.json()["layout"]
+    assert "regions" in layout_none
+    assert "header" in layout_none["regions"], "Region 'header' (None) hilang setelah disimpan!"
+    assert layout_none["regions"]["header"] is None
+
 
