@@ -242,6 +242,259 @@ EXTRACT_STRUCTURE = """
 }
 """
 
+# Skrip ekstraksi visual tree dan computed styles
+VISUAL_EXTRACT_SCRIPT = """
+() => {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const body = document.body;
+  if (!body) return { viewport: { w: vw, h: vh }, page: {}, nodes: [], truncated: false };
+
+  const bodyStyle = window.getComputedStyle(body);
+  const pageBg = bodyStyle.backgroundColor || '';
+  let pageBgImg = bodyStyle.backgroundImage || 'none';
+  if (pageBgImg !== 'none' && pageBgImg.length > 100) {
+    pageBgImg = pageBgImg.slice(0, 100);
+  }
+  const pageFont = bodyStyle.fontFamily || '';
+
+  const ignoredTags = new Set([
+    'SCRIPT', 'STYLE', 'NOSCRIPT', 'META', 'LINK', 'TEMPLATE',
+    'DEFS', 'CLIPPATH', 'HEAD', 'TITLE', 'BR'
+  ]);
+
+  const cleanSvgString = (svgEl) => {
+    try {
+      const clone = svgEl.cloneNode(true);
+      const scripts = clone.querySelectorAll('script');
+      scripts.forEach(s => s.remove());
+      const all = [clone, ...clone.querySelectorAll('*')];
+      for (const node of all) {
+        const attrs = Array.from(node.attributes || []);
+        for (const attr of attrs) {
+          if (attr.name.toLowerCase().startsWith('on') || attr.value.toLowerCase().includes('javascript:')) {
+            node.removeAttribute(attr.name);
+          }
+        }
+      }
+      const raw = clone.outerHTML || '';
+      return raw.length <= 4096 ? raw : raw.slice(0, 4096);
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const getDirectText = (el) => {
+    let text = '';
+    for (let i = 0; i < el.childNodes.length; i++) {
+      const node = el.childNodes[i];
+      if (node.nodeType === Node.TEXT_NODE) {
+        text += node.textContent || '';
+      }
+    }
+    text = text.trim().replace(/\\s+/g, ' ');
+    if (!text) return null;
+    return text.length > 120 ? text.slice(0, 120) : text;
+  };
+
+  const checkPseudo = (el) => {
+    const res = {};
+    for (const pseudo of ['::before', '::after']) {
+      try {
+        const ps = window.getComputedStyle(el, pseudo);
+        const content = ps.getPropertyValue('content');
+        if (content && content !== 'none' && content !== 'normal' && content !== '""' && content !== "''") {
+          const item = { content: content.replace(/^["']|["']$/g, '') };
+          if (ps.color && ps.color !== 'rgba(0, 0, 0, 0)') item.color = ps.color;
+          res[pseudo.replace('::', '')] = item;
+        }
+      } catch (e) {}
+    }
+    return Object.keys(res).length > 0 ? res : null;
+  };
+
+  const extractStyle = (el, style) => {
+    const s = {};
+    // Color
+    if (style.color && style.color !== 'rgba(0, 0, 0, 0)' && style.color !== 'transparent') {
+      s.color = style.color;
+    }
+    // Background color
+    if (style.backgroundColor && style.backgroundColor !== 'rgba(0, 0, 0, 0)' && style.backgroundColor !== 'transparent') {
+      s.backgroundColor = style.backgroundColor;
+    }
+    // Font
+    if (style.fontFamily) s.fontFamily = style.fontFamily;
+    if (style.fontSize && style.fontSize !== '0px') s.fontSize = style.fontSize;
+    if (style.fontWeight && style.fontWeight !== '400' && style.fontWeight !== 'normal') s.fontWeight = style.fontWeight;
+    if (style.lineHeight && style.lineHeight !== 'normal') s.lineHeight = style.lineHeight;
+    if (style.textAlign && style.textAlign !== 'start' && style.textAlign !== 'left') s.textAlign = style.textAlign;
+    if (style.letterSpacing && style.letterSpacing !== 'normal' && style.letterSpacing !== '0px') s.letterSpacing = style.letterSpacing;
+
+    // Borders
+    const bStyle = style.borderStyle || 'none';
+    if (bStyle && bStyle !== 'none' && bStyle !== 'hidden') {
+      s.borderStyle = bStyle;
+      if (style.borderTopWidth && style.borderTopWidth !== '0px') s.borderTopWidth = style.borderTopWidth;
+      if (style.borderRightWidth && style.borderRightWidth !== '0px') s.borderRightWidth = style.borderRightWidth;
+      if (style.borderBottomWidth && style.borderBottomWidth !== '0px') s.borderBottomWidth = style.borderBottomWidth;
+      if (style.borderLeftWidth && style.borderLeftWidth !== '0px') s.borderLeftWidth = style.borderLeftWidth;
+      if (style.borderColor && style.borderColor !== 'rgba(0, 0, 0, 0)') s.borderColor = style.borderColor;
+    }
+    if (style.borderRadius && style.borderRadius !== '0px') s.borderRadius = style.borderRadius;
+    if (style.boxShadow && style.boxShadow !== 'none') s.boxShadow = style.boxShadow;
+
+    // Padding
+    if (style.paddingTop && style.paddingTop !== '0px') s.paddingTop = style.paddingTop;
+    if (style.paddingRight && style.paddingRight !== '0px') s.paddingRight = style.paddingRight;
+    if (style.paddingBottom && style.paddingBottom !== '0px') s.paddingBottom = style.paddingBottom;
+    if (style.paddingLeft && style.paddingLeft !== '0px') s.paddingLeft = style.paddingLeft;
+
+    // Layout
+    const disp = style.display || 'inline';
+    if (disp && disp !== 'inline' && disp !== 'block') {
+      s.display = disp;
+      if (disp.includes('flex')) {
+        if (style.flexDirection && style.flexDirection !== 'row') s.flexDirection = style.flexDirection;
+        if (style.justifyContent && style.justifyContent !== 'normal' && style.justifyContent !== 'flex-start') s.justifyContent = style.justifyContent;
+        if (style.alignItems && style.alignItems !== 'normal' && style.alignItems !== 'stretch') s.alignItems = style.alignItems;
+        if (style.gap && style.gap !== 'normal' && style.gap !== '0px') s.gap = style.gap;
+      }
+    }
+    if (style.opacity && style.opacity !== '1') s.opacity = style.opacity;
+
+    return s;
+  };
+
+  const rawNodes = [];
+  let counter = 0;
+
+  const walk = (el, parentId) => {
+    if (!el || el.nodeType !== Node.ELEMENT_NODE) return;
+    const tag = el.tagName.toUpperCase();
+    if (ignoredTags.has(tag)) return;
+
+    const style = window.getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return;
+
+    const r = el.getBoundingClientRect();
+    if (r.width <= 0 && r.height <= 0) return;
+
+    const currentId = `n${counter++}`;
+    const tagLower = el.tagName.toLowerCase();
+    const role = el.getAttribute('role') || null;
+    const isInput = tagLower === 'input';
+    const isTextarea = tagLower === 'textarea';
+    const inputType = isInput ? (el.getAttribute('type') || 'text').toLowerCase() : (isTextarea ? 'textarea' : null);
+
+    let text = null;
+    if (isInput) {
+      if (inputType === 'submit' || inputType === 'button' || inputType === 'reset') {
+        text = el.value || null;
+      }
+    } else if (tagLower === 'svg') {
+      text = null;
+    } else {
+      text = getDirectText(el);
+    }
+
+    const placeholder = (isInput || isTextarea) ? (el.getAttribute('placeholder') || null) : null;
+
+    let icon = null;
+    if (tagLower === 'svg') {
+      const svgStr = cleanSvgString(el);
+      if (svgStr) icon = { svg: svgStr };
+    } else if (tagLower === 'img') {
+      const src = (el.getAttribute('src') || '').split('?')[0];
+      const alt = el.getAttribute('alt') || null;
+      if (src) icon = { img: { src, alt } };
+    }
+
+    const nodeStyle = extractStyle(el, style);
+
+    if (inputType === 'checkbox' || tagLower === 'button' || (el.className && String(el.className).includes('eye'))) {
+      const pseudo = checkPseudo(el);
+      if (pseudo) nodeStyle.pseudo = pseudo;
+    }
+
+    rawNodes.push({
+      id: currentId,
+      parent: parentId,
+      tag: tagLower,
+      role: role,
+      box: {
+        x: Math.round(r.x + window.scrollX),
+        y: Math.round(r.y + window.scrollY),
+        w: Math.round(r.width),
+        h: Math.round(r.height)
+      },
+      text: text,
+      placeholder: placeholder,
+      inputType: inputType,
+      style: nodeStyle,
+      icon: icon
+    });
+
+    if (tagLower !== 'svg') {
+      for (let i = 0; i < el.children.length; i++) {
+        walk(el.children[i], currentId);
+      }
+    }
+  };
+
+  walk(body, null);
+
+  return {
+    viewport: { w: vw, h: vh },
+    page: {
+      backgroundColor: pageBg,
+      backgroundImage: pageBgImg,
+      fontFamily: pageFont
+    },
+    nodes: rawNodes,
+    truncated: false
+  };
+}
+"""
+
+
+def _prune_visual_tree(
+    visual: dict[str, Any], max_nodes: int = 150, max_bytes: int = 60000
+) -> dict[str, Any]:
+    """Batasi node visual agar tidak melebihi 150 node dan 60 KB JSON."""
+    if not isinstance(visual, dict):
+        return visual
+    nodes = visual.get("nodes", [])
+    if not isinstance(nodes, list):
+        return visual
+
+    if len(nodes) <= max_nodes and len(json.dumps(visual, ensure_ascii=True)) <= max_bytes:
+        return visual
+
+    visual["truncated"] = True
+    while (
+        len(nodes) > max_nodes or len(json.dumps(visual, ensure_ascii=True)) > max_bytes
+    ) and len(nodes) > 1:
+        parent_ids = {n["parent"] for n in nodes if n.get("parent")}
+        leaves = [n for n in nodes if n.get("id") not in parent_ids]
+        if not leaves:
+            nodes.pop()
+        else:
+            def _score(n: dict) -> tuple:
+                has_input = 1 if n.get("inputType") else 0
+                has_icon = 1 if n.get("icon") else 0
+                has_text = 1 if n.get("text") else 0
+                box = n.get("box", {})
+                area = box.get("w", 0) * box.get("h", 0)
+                return (has_input, has_icon, has_text, area)
+
+            leaves.sort(key=_score)
+            victim = leaves[0]
+            nodes.remove(victim)
+
+    visual["nodes"] = nodes
+    return visual
+
 # Skrip untuk capture HAR (network log) - request/response headers & body
 EXTRACT_HAR = """
 () => {
@@ -861,6 +1114,17 @@ class BrowserManager:
 
         # Also get structure for reconstruction
         structure = page.evaluate(EXTRACT_STRUCTURE)
+        if isinstance(structure, dict):
+            try:
+                raw_visual = page.evaluate(VISUAL_EXTRACT_SCRIPT)
+                structure["visual"] = _prune_visual_tree(raw_visual)
+            except Exception:  # noqa: BLE001
+                structure["visual"] = {
+                    "viewport": {"w": 1440, "h": 900},
+                    "page": {},
+                    "nodes": [],
+                    "truncated": False,
+                }
 
         # Get recorded interaction events
         page_events = page.evaluate("() => (window.__nigmasim && window.__nigmasim.events) || []")

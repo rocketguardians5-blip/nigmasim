@@ -119,3 +119,106 @@ def test_no_async_functions_in_detector_module():
         if inspect.isfunction(obj) and inspect.iscoroutinefunction(obj):
             async_funcs.append(name)
     assert len(async_funcs) == 0, f"Ditemukan fungsi async di detector.py: {async_funcs}"
+
+
+def test_record_capture_redacts_visual_structure():
+    """record_capture harus meredaksi email, token, dan data sensitif pada structure['visual']."""
+    from app.db.session import SessionLocal
+    from app.models.capture import CaptureSession, Screen
+    from app.models.registry import Application, Project
+    from app.services.capture import record_capture
+
+    with SessionLocal() as db:
+        app = Application(
+            name="App Test Visual",
+            source_url="http://example.com",
+            authorization_status="approved",
+        )
+        db.add(app)
+        db.flush()
+
+        project = Project(
+            application_id=app.id,
+            name="Project Test Visual",
+        )
+        db.add(project)
+        db.flush()
+        session = CaptureSession(
+            project_id=project.id,
+            operator_id=1,
+            status="active",
+            viewport_width=1440,
+            viewport_height=900,
+        )
+        db.add(session)
+        db.flush()
+
+        meta = {
+            "file_path": "captures/test_screen.png",
+            "url": "http://example.com/login",
+            "title": "Halaman Login",
+            "full_page": False,
+            "elements": [],
+            "mask_boxes": [{"x": 100, "y": 100, "w": 200, "h": 50}],
+            "structure": {
+                "tables": [],
+                "visual": {
+                    "viewport": {"w": 1440, "h": 900},
+                    "page": {"backgroundColor": "rgb(240, 240, 240)"},
+                    "nodes": [
+                        {
+                            "id": "n1",
+                            "tag": "p",
+                            "box": {"x": 10, "y": 10, "w": 100, "h": 20},
+                            "text": "Hubungi admin@perusahaan.com atau 081234567890",
+                            "placeholder": "Contoh: user@secret.com",
+                            "icon": {"img": {"src": "/logo.png?token=secret123&session=abc", "alt": "Logo"}},
+                        },
+                        {
+                            "id": "n2",
+                            "tag": "div",
+                            "box": {"x": 10, "y": 40, "w": 200, "h": 20},
+                            "text": "Bearer eyJhbGciOiJIUzI1NiJ9.secret.token AIzaSyD1234567890abcdefghijklmnopqrstuvwxyz",
+                            "placeholder": None,
+                        },
+                        {
+                            "id": "n3",
+                            "tag": "span",
+                            "box": {"x": 120, "y": 110, "w": 50, "h": 20},
+                            "text": "Data KTP Rahasia 12345678",
+                            "placeholder": "KTP",
+                            "icon": {"svg": "<svg>rahasia</svg>"},
+                        },
+                    ],
+                },
+            },
+        }
+
+        screen = record_capture(db, session, project, meta)
+        db.commit()
+
+        stored_screen = db.get(Screen, screen.id)
+        assert stored_screen is not None
+        assert stored_screen.structure is not None
+        visual = stored_screen.structure.get("visual")
+        assert visual is not None
+
+        nodes = visual["nodes"]
+        n1 = next(n for n in nodes if n["id"] == "n1")
+        assert "admin@perusahaan.com" not in n1["text"]
+        assert "[EMAIL DISEMASKAN]" in n1["text"]
+        assert "081234567890" not in n1["text"]
+        assert "[TELEPON DISEMASKAN]" in n1["text"]
+        assert "user@secret.com" not in n1["placeholder"]
+        assert "[EMAIL DISEMASKAN]" in n1["placeholder"]
+        assert n1["icon"]["img"]["src"] == "/logo.png"
+
+        n2 = next(n for n in nodes if n["id"] == "n2")
+        assert "Bearer [DISEMASKAN]" in n2["text"]
+        assert "[API KEY DISEMASKAN]" in n2["text"]
+
+        n3 = next(n for n in nodes if n["id"] == "n3")
+        assert n3["text"] is None
+        assert n3["placeholder"] is None
+        assert n3["icon"] is None
+

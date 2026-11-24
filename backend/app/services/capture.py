@@ -130,6 +130,95 @@ def _relative_path(absolute: str) -> str:
         return Path(absolute).name
 
 
+def _redact_sensitive_text(text: str) -> str:
+    """Redaksi email, nomor telepon, bearer token, API key, dan query string."""
+    if not text or not isinstance(text, str):
+        return text
+    # Bearer token
+    text = re.sub(
+        r"(?i)\bBearer\s+[0-9A-Za-z._~+/=-]{8,}",
+        "Bearer [DISEMASKAN]",
+        text,
+    )
+    # JWT tokens
+    text = re.sub(
+        r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b",
+        "[TOKEN DISEMASKAN]",
+        text,
+    )
+    # API key (AIza, sk-)
+    text = re.sub(r"\bAIza[0-9A-Za-z-_]{30,45}\b", "[API KEY DISEMASKAN]", text)
+    text = re.sub(r"\bsk-[0-9A-Za-z_-]{16,}\b", "[API KEY DISEMASKAN]", text)
+    # Email
+    text = re.sub(
+        r"\b[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+\b",
+        "[EMAIL DISEMASKAN]",
+        text,
+    )
+    # Nomor telepon panjang (minimal 8 digit berurutan/berpola)
+    text = re.sub(
+        r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,9}\b",
+        "[TELEPON DISEMASKAN]",
+        text,
+    )
+    return text
+
+
+def _box_overlaps(b1: dict[str, Any], b2: dict[str, Any]) -> bool:
+    try:
+        x1, y1, w1, h1 = float(b1.get("x", 0)), float(b1.get("y", 0)), float(b1.get("w", 0)), float(b1.get("h", 0))
+        x2, y2, w2, h2 = float(b2.get("x", 0)), float(b2.get("y", 0)), float(b2.get("w", 0)), float(b2.get("h", 0))
+        return x1 < x2 + w2 and x1 + w1 > x2 and y1 < y2 + h2 and y1 + h1 > y2
+    except Exception:
+        return False
+
+
+def _sanitize_visual_tree(
+    visual: dict[str, Any], mask_boxes: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    if not isinstance(visual, dict):
+        return visual
+    nodes = visual.get("nodes")
+    if not isinstance(nodes, list):
+        return visual
+
+    sanitized_nodes = []
+    masks = [m for m in (mask_boxes or []) if isinstance(m, dict)]
+
+    for raw_node in nodes:
+        if not isinstance(raw_node, dict):
+            continue
+        node = dict(raw_node)
+        box = node.get("box") or {}
+
+        # Cek jika tumpang tindih dengan area mask yang ditandai operator
+        is_masked = False
+        if masks and isinstance(box, dict):
+            for mask in masks:
+                if _box_overlaps(box, mask):
+                    is_masked = True
+                    break
+
+        if is_masked:
+            node["text"] = None
+            node["placeholder"] = None
+            node["icon"] = None
+        else:
+            if node.get("text"):
+                node["text"] = _redact_sensitive_text(str(node["text"]))
+            if node.get("placeholder"):
+                node["placeholder"] = _redact_sensitive_text(str(node["placeholder"]))
+            if isinstance(node.get("icon"), dict) and "img" in node["icon"] and isinstance(node["icon"]["img"], dict):
+                src = str(node["icon"]["img"].get("src") or "")
+                if "?" in src:
+                    node["icon"]["img"]["src"] = src.split("?")[0]
+
+        sanitized_nodes.append(node)
+
+    visual["nodes"] = sanitized_nodes
+    return visual
+
+
 def absolute_path(relative: str) -> Path:
     root = settings.storage_path
     candidate = (root / relative).resolve()
@@ -181,6 +270,12 @@ def record_capture(
             counter += 1
         key = f"{base_key}-{counter}"
 
+    raw_structure = meta.get("structure")
+    if isinstance(raw_structure, dict) and "visual" in raw_structure:
+        raw_structure = dict(raw_structure)
+        mask_boxes = meta.get("mask_boxes") or meta.get("masks")
+        raw_structure["visual"] = _sanitize_visual_tree(raw_structure["visual"], mask_boxes)
+
     screen = Screen(
         project_id=project.id,
         capture_session_id=session.id,
@@ -193,7 +288,7 @@ def record_capture(
         capture_version=version,
         category=None,
         # Struktur semantik (tabel, heading, form, card) untuk mesin rekonstruksi.
-        structure=meta.get("structure"),
+        structure=raw_structure,
         tags=[],
         review_status="pending",
         captured_at=now_utc(),
