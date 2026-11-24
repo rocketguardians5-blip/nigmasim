@@ -5,7 +5,7 @@
   "project_id": 2,
   "application_id": 2,
   "application_name": "Api-Nigma",
-  "generated_at": "2026-11-23T05:26:00Z",
+  "generated_at": "2026-11-24T09:57:01Z",
   "runtime_path": "/?app=demo-client-api-nigma",
   "screens": [
     {
@@ -16,7 +16,7 @@
     },
     {
       "key": "dashboard",
-      "title": "Dashboard Overview - API Nigma Portal - Developer API Gateway",
+      "title": "API Nigma Portal Overview",
       "route": "/dashboard",
       "kind": "dashboard"
     },
@@ -38,9 +38,30 @@
     {
       "screen_key": "masuk-ke-portal---api-nigma",
       "screen_title": "Masuk ke Portal - API Nigma",
+      "screen_id": 4,
+      "capture_version": 2,
+      "reason": "Versi capture v2 dilewati (status draft); memakai v3 yang sudah disetujui."
+    },
+    {
+      "screen_key": "masuk-ke-portal---api-nigma",
+      "screen_title": "Masuk ke Portal - API Nigma",
       "screen_id": 3,
       "capture_version": 1,
-      "reason": "Versi capture v1 dilewati (status belum ada rekonstruksi); memakai v2 yang sudah disetujui."
+      "reason": "Versi capture v1 dilewati (status belum ada rekonstruksi); memakai v3 yang sudah disetujui."
+    },
+    {
+      "screen_key": "dashboard-overview---api-nigma-portal---developer-api-gatewa",
+      "screen_title": "Dashboard Overview - API Nigma Portal - Developer API Gateway",
+      "screen_id": 5,
+      "capture_version": 1,
+      "reason": "Versi capture v1 dilewati (status approved); memakai v2 yang sudah disetujui."
+    },
+    {
+      "screen_key": "api-playground---interactive-http-client---developer-api-gat",
+      "screen_title": "API Playground - Interactive HTTP Client - Developer API Gateway",
+      "screen_id": 11,
+      "capture_version": 3,
+      "reason": "Versi capture v3 dilewati (status draft); memakai v2 yang sudah disetujui."
     },
     {
       "screen_key": "api-playground---interactive-http-client---developer-api-gat",
@@ -48,6 +69,13 @@
       "screen_id": 6,
       "capture_version": 1,
       "reason": "Versi capture v1 dilewati (status draft); memakai v2 yang sudah disetujui."
+    },
+    {
+      "screen_key": "katalog-referensi-kode-error---api-nigma---developer-api-gat",
+      "screen_title": "Katalog Referensi Kode Error - API Nigma - Developer API Gateway",
+      "screen_id": 12,
+      "capture_version": 2,
+      "reason": "Versi capture v2 dilewati (status belum ada rekonstruksi); memakai v1 yang sudah disetujui."
     }
   ],
   "assumptions": [
@@ -63,26 +91,20 @@
         },
         {
           "topic": "Layout",
-          "description": "Halaman login terpusat (single-card layout) dengan latar belakang bernuansa terang dan lembut.",
+          "description": "Tampilan halaman berupa form login terpusat (centered card design) tanpa sidebar atau header navigasi atas.",
           "confidence": "high",
           "resolved": true
         },
         {
-          "topic": "Komponen",
-          "description": "Tersedia tombol auto-fill demo untuk mempercepat pengisian akun pengujian default.",
-          "confidence": "high",
-          "resolved": true
-        },
-        {
-          "topic": "Aturan bisnis",
-          "description": "Kredensial bawaan admin@nigma.id / password dapat digunakan untuk login ke portal.",
+          "topic": "Form",
+          "description": "Form login berisi input email/username, password dengan toggle visibilitas, checkbox ingat saya, link lupa password, dan tombol submit utama.",
           "confidence": "high",
           "resolved": true
         }
       ]
     },
     {
-      "screen_title": "Dashboard Overview - API Nigma Portal - Developer API Gateway",
+      "screen_title": "API Nigma Portal Overview",
       "route": "/dashboard",
       "items": [
         {
@@ -93,13 +115,13 @@
         },
         {
           "topic": "Layout",
-          "description": "Sidebar bersifat statis di kiri, header berisi navigasi global dan profil.",
+          "description": "Aplikasi memiliki sidebar kiri tetap dengan lebar 256px dan area konten utama yang dapat di-scroll.",
           "confidence": "high",
           "resolved": true
         },
         {
           "topic": "Komponen",
-          "description": "Elemen dengan teks 'Playground' di dalam kartu adalah link navigasi ke halaman playground spesifik.",
+          "description": "Kartu layanan mikro dan kartu statistik memberikan visualisasi cepat status operasional dan statistik gateway.",
           "confidence": "high",
           "resolved": true
         }

@@ -23,7 +23,7 @@ export const definition: SimAppDefinition = {
       "key": "login",
       "title": "API Nigma Portal",
       "route": "/login",
-      "subtitle": "/login",
+      "subtitle": "Masuk untuk mengelola gateway, katalog kode error, dan playground HTTP.",
       "kind": "auth",
       "sections": [
         {
@@ -35,23 +35,58 @@ export const definition: SimAppDefinition = {
               "key": "email_username",
               "label": "Email / Username",
               "type": "email",
-              "required": true
+              "required": true,
+              "placeholder": "nama@contoh.com",
+              "style": {
+                "color": "rgb(17, 24, 39)",
+                "backgroundColor": "rgb(255, 255, 255)",
+                "fontFamily": "\"Plus Jakarta Sans\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif",
+                "fontSize": "12px",
+                "fontWeight": "500",
+                "lineHeight": "16px",
+                "borderColor": "rgb(79, 70, 229)",
+                "borderRadius": "12px",
+                "boxShadow": "rgb(255, 255, 255) 0px 0px 0px 0px, rgba(99, 102, 241, 0.2) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px"
+              },
+              "iconSvg": "<svg class=\"w-4 h-4\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\">\n                                <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207\"></path>\n                            </svg>"
             },
             {
               "key": "password",
               "label": "Password",
               "type": "password",
-              "required": true
+              "required": true,
+              "placeholder": "••••••••",
+              "style": {
+                "color": "rgb(17, 24, 39)",
+                "backgroundColor": "rgb(250, 250, 249)",
+                "fontFamily": "\"JetBrains Mono\", monospace",
+                "fontSize": "12px",
+                "lineHeight": "16px",
+                "borderColor": "rgb(231, 229, 228)",
+                "borderRadius": "12px"
+              },
+              "iconSvg": "<svg class=\"w-4 h-4\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\">\n                                <path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z\"></path>\n                            </svg>",
+              "toggleVisibility": true
             },
             {
               "key": "ingat_saya",
               "label": "Ingat Saya",
               "type": "checkbox",
-              "required": false
+              "required": false,
+              "style": {
+                "color": "rgb(79, 70, 229)",
+                "fontFamily": "\"Plus Jakarta Sans\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif",
+                "fontSize": "12px",
+                "lineHeight": "16px"
+              }
             }
           ],
-          "submitLabel": "MASUK KE PORTAL",
+          "submitLabel": "Masuk ke Portal",
           "successToast": "Login disimulasikan. Mengarahkan ke halaman aplikasi.",
+          "linkRight": {
+            "label": "Lupa Password?",
+            "action": "Aksi simulasi: Lupa Password?."
+          },
           "prefill": {
             "label": "Isi Otomatis (Demo)",
             "values": {
@@ -60,28 +95,47 @@ export const definition: SimAppDefinition = {
             }
           },
           "navigateTo": "/dashboard"
-        },
-        {
-          "type": "actions",
-          "title": "Aksi lain",
-          "items": [
-            {
-              "label": "Tampilkan/Sembunyikan Password",
-              "variant": "secondary",
-              "toast": "Aksi simulasi: Tampilkan/Sembunyikan Password."
-            },
-            {
-              "label": "Lupa Password?",
-              "variant": "secondary",
-              "toast": "Aksi simulasi: Lupa Password?."
-            }
-          ]
         }
-      ]
+      ],
+      "theme": {
+        "page": {
+          "backgroundColor": "rgb(250, 250, 249)",
+          "fontFamily": "\"Plus Jakarta Sans\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif"
+        },
+        "primary": {
+          "backgroundColor": "rgb(17, 24, 39)",
+          "color": "rgb(255, 255, 255)",
+          "borderRadius": "9999px",
+          "fontWeight": "700"
+        },
+        "text": {
+          "heading": {
+            "color": "rgb(17, 24, 39)",
+            "fontSize": "24px",
+            "fontWeight": "900"
+          },
+          "body": {
+            "color": "rgb(120, 113, 108)",
+            "fontSize": "12px"
+          }
+        },
+        "card": {
+          "box": {
+            "x": 512,
+            "y": 112,
+            "w": 416,
+            "h": 635
+          },
+          "backgroundColor": "rgb(255, 255, 255)",
+          "borderColor": "rgba(231, 229, 228, 0.7)",
+          "borderRadius": "24px",
+          "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(231, 229, 228, 0.4) 0px 20px 25px -5px, rgba(231, 229, 228, 0.4) 0px 8px 10px -6px"
+        }
+      }
     },
     {
       "key": "dashboard",
-      "title": "Dashboard Overview - API Nigma Portal - Developer API Gateway",
+      "title": "API Nigma Portal Overview",
       "route": "/dashboard",
       "subtitle": "/dashboard",
       "kind": "dashboard",
@@ -91,9 +145,9 @@ export const definition: SimAppDefinition = {
           "title": "Aksi halaman",
           "items": [
             {
-              "label": "Tambah Project",
+              "label": "Tambah Project Banner Utama",
               "variant": "primary",
-              "toast": "Aksi simulasi: Tambah Project."
+              "toast": "Aksi simulasi: Tambah Project Banner Utama."
             },
             {
               "label": "Katalog Error",
@@ -107,43 +161,85 @@ export const definition: SimAppDefinition = {
               "toast": "Aksi simulasi: Buka Playground."
             },
             {
-              "label": "Tambah Project (Matrix)",
+              "label": "Tambah Project Sekunder",
               "variant": "primary",
-              "toast": "Aksi simulasi: Tambah Project (Matrix)."
+              "toast": "Aksi simulasi: Tambah Project Sekunder."
             },
             {
-              "label": "Playground SIMRS",
+              "label": "Playground SIMRS NigmaCare",
               "variant": "secondary",
-              "toast": "Aksi simulasi: Playground SIMRS."
+              "toast": "Aksi simulasi: Playground SIMRS NigmaCare."
             },
             {
-              "label": "Playground PIMS",
+              "label": "Playground PIMS Mobile API",
               "variant": "secondary",
-              "toast": "Aksi simulasi: Playground PIMS."
+              "toast": "Aksi simulasi: Playground PIMS Mobile API."
             },
             {
-              "label": "Playground PIMS 2",
+              "label": "Playground PIMS Mobile API 2",
               "variant": "secondary",
-              "toast": "Aksi simulasi: Playground PIMS 2."
+              "toast": "Aksi simulasi: Playground PIMS Mobile API 2."
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Tautan & kartu",
+          "items": [
+            {
+              "label": "Statistik Total APIs",
+              "meta": "Kartu dari rekonstruksi"
             },
             {
-              "label": "Playground Mobile",
-              "variant": "secondary",
-              "toast": "Aksi simulasi: Playground Mobile."
+              "label": "Statistik Active Services",
+              "meta": "Kartu dari rekonstruksi"
             },
             {
-              "label": "Playground Test API",
-              "variant": "secondary",
-              "toast": "Aksi simulasi: Playground Test API."
+              "label": "Statistik Requests Today",
+              "meta": "Kartu dari rekonstruksi"
             },
             {
-              "label": "Inspect di API Playground",
-              "variant": "secondary",
-              "toast": "Aksi simulasi: Inspect di API Playground."
+              "label": "Statistik Error Rate",
+              "meta": "Kartu dari rekonstruksi"
             }
           ]
         }
-      ]
+      ],
+      "theme": {
+        "page": {
+          "backgroundColor": "rgb(250, 250, 249)",
+          "fontFamily": "\"Plus Jakarta Sans\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif"
+        },
+        "primary": {
+          "backgroundColor": "rgb(79, 70, 229)",
+          "color": "rgb(255, 255, 255)",
+          "borderRadius": "16px",
+          "fontWeight": "700"
+        },
+        "text": {
+          "heading": {
+            "color": "rgb(17, 24, 39)",
+            "fontSize": "30px",
+            "fontWeight": "900"
+          },
+          "body": {
+            "color": "rgb(120, 113, 108)",
+            "fontSize": "14px"
+          }
+        },
+        "card": {
+          "box": {
+            "x": 280,
+            "y": 448,
+            "w": 746,
+            "h": 659
+          },
+          "backgroundColor": "rgb(255, 255, 255)",
+          "borderColor": "rgba(231, 229, 228, 0.7)",
+          "borderRadius": "24px",
+          "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px"
+        }
+      }
     },
     {
       "key": "error-codes",

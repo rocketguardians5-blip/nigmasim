@@ -212,6 +212,55 @@ def _group_for(element_type: str) -> str:
     return "other"
 
 
+STATIC_TEXT_TERMS = (
+    "hak cipta",
+    "copyright",
+    "footer",
+    "badge",
+    "gateway v",
+    "v2.",
+    "teks ",
+    "kredensial",
+    "catatan",
+    "versi",
+    "version",
+)
+
+
+def _is_input_element(element: dict[str, Any]) -> bool:
+    """Periksa apakah elemen benar-benar komponen input nyata, bukan teks statis/footer/badge."""
+    el_type = (element.get("type") or "").lower()
+    label = _normalize(element.get("label") or "")
+
+    # Tipe komponen yang pasti bukan input form
+    if el_type in ("text", "heading", "logo", "card", "table", "action", "nav", "button", "link", "container"):
+        return False
+
+    # Jika ada metadata DOM, periksa tag aslinya
+    dom = (element.get("props") or {}).get("dom") or {}
+    dom_tag = (dom.get("tag") or "").lower().strip()
+    if dom_tag and dom_tag not in ("input", "select", "textarea"):
+        return False
+
+    # Filter istilah teks statis/footer/copyright/badge
+    if any(term in label for term in STATIC_TEXT_TERMS):
+        return False
+
+    # Label diawali "label " tanpa indikasi nama field input
+    if label.startswith("label ") and not any(
+        w in label for w in ("email", "user", "password", "sandi", "input", "nama", "telepon", "cari", "search")
+    ):
+        return False
+
+    if el_type in ("input", "select", "dropdown", "textarea", "checkbox", "email", "password"):
+        return True
+
+    if el_type == "field":
+        return True
+
+    return False
+
+
 def _collect_elements(draft: Reconstruction) -> tuple[list[dict[str, Any]], set[str]]:
     """Gabungkan komponen yang direview dengan section layout yang disetujui.
 
@@ -684,6 +733,9 @@ def _build_field(
     used_keys: set[str],
     screen: Screen | None = None,
 ) -> dict[str, Any] | None:
+    if not _is_input_element(element):
+        return None
+
     label = element["label"]
     base_key = _key_from_label(label)
     key = base_key
@@ -902,7 +954,7 @@ def _build_table(
     # Dropdown filter di sekitar tabel (mis. "Filter Project").
     filters: list[dict[str, Any]] = []
     for element in elements:
-        if _group_for(element["type"]) != "field":
+        if not _is_input_element(element):
             continue
         lowered = _normalize(element["label"])
         if "filter" not in lowered:
@@ -976,7 +1028,7 @@ def _build_page(
         subtitle = screen.route_label or screen.source_url or ""
 
     table_element = _find_table(elements)
-    field_elements = [element for element in elements if _group_for(element["type"]) == "field"]
+    field_elements = [element for element in elements if _is_input_element(element)]
     # Dropdown environment/profil di header bukan field form halaman.
     main_field_elements = [
         element

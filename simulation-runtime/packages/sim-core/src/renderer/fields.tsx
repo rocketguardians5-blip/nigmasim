@@ -33,11 +33,28 @@ export function validateForm(fields: SimField[], values: FormValues): Record<str
   return errors
 }
 
+/** Siapkan SVG string agar valid dirender di data URI <img> */
+function prepareSvg(svg: string): string {
+  let s = svg.trim()
+  if (!s.startsWith('<svg')) return ''
+
+  // Pastikan xmlns ada untuk parsing XML yang valid di tag <img>
+  if (!s.includes('xmlns=')) {
+    s = s.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')
+  }
+
+  // Ganti currentColor dengan warna netral (#6b7280) karena <img> terisolasi dari cascade CSS
+  s = s.replace(/currentColor/g, '#6b7280')
+
+  return s
+}
+
 /** Render SVG icon secara aman dari data URI tanpa dangerouslySetInnerHTML */
 function SafeIcon({ svgString, className }: { svgString?: string; className?: string }) {
-  if (!svgString || !svgString.trim().startsWith('<svg')) return null
-  const encoded = encodeURIComponent(svgString.trim())
-  const dataUri = `data:image/svg+xml;utf8,${encoded}`
+  if (!svgString) return null
+  const prepared = prepareSvg(svgString)
+  if (!prepared) return null
+  const dataUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(prepared)}`
   return (
     <img
       src={dataUri}

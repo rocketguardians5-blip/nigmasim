@@ -348,3 +348,69 @@ def test_legacy_screen_without_theme_or_dom_generates_cleanly():
     assert pwd_field["type"] == "password"
     assert "style" not in pwd_field
     assert "iconSvg" not in pwd_field
+
+
+def test_static_text_and_footer_not_converted_to_form_fields():
+    """Teks statis, badge, dan footer tidak boleh pernah dijadikan field input form."""
+    screen = _make_mock_screen(screen_id=9, visual=None)
+
+    components = [
+        # Teks statis / badge yang sempat salah dideteksi sebagai 'field' oleh AI Vision
+        {
+            "type": "field",
+            "label": "Label API Nigma Gateway v2.4",
+            "props": {"dom": {"tag": "div", "text": "API Nigma Gateway v2.4"}},
+        },
+        {
+            "type": "field",
+            "label": "Teks Hak Cipta Footer",
+            "props": {"dom": {"tag": "footer", "text": "© 2026 API Nigma Portal"}},
+        },
+        {
+            "type": "text",
+            "label": "Masuk untuk mengelola gateway, katalog kode error, dan playground HTTP.",
+            "props": {"dom": {"tag": "p"}},
+        },
+        # Field input nyata
+        {
+            "type": "input",
+            "label": "Field Email / Username",
+            "props": {"dom": {"tag": "input", "inputType": "text"}},
+        },
+        {
+            "type": "input",
+            "label": "Field Password",
+            "props": {"dom": {"tag": "input", "inputType": "password"}},
+        },
+        {
+            "type": "input",
+            "label": "Checkbox Ingat Saya",
+            "props": {"dom": {"tag": "input", "inputType": "checkbox"}},
+        },
+        {
+            "type": "button",
+            "label": "Tombol Masuk ke Portal",
+            "props": {},
+        },
+    ]
+
+    draft = _make_mock_reconstruction(components=components, theme=None)
+    page, datasets, err = _build_page(draft, screen, "login", "/login")
+    assert err is None
+    assert page is not None
+
+    form_section = page["sections"][0]
+    field_keys = [f["key"] for f in form_section["fields"]]
+    field_labels = [f["label"] for f in form_section["fields"]]
+
+    # Hanya 3 input nyata yang masuk
+    assert len(form_section["fields"]) == 3
+    assert any("email" in k for k in field_keys)
+    assert any("password" in k for k in field_keys)
+    assert any("ingat_saya" in k for k in field_keys)
+
+    # Teks statis tidak boleh masuk
+    assert not any("gateway" in lbl.lower() for lbl in field_labels)
+    assert not any("cipta" in lbl.lower() for lbl in field_labels)
+    assert not any("footer" in lbl.lower() for lbl in field_labels)
+
