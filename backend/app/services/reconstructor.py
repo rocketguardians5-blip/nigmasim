@@ -1072,7 +1072,11 @@ def _extract_visual_theme(visual: dict[str, Any]) -> dict[str, Any]:
         return theme
 
     # Cari primary button (submit atau button CTA)
+    # Prioritaskan:
+    # 1. Tombol dengan inputType="submit"
+    # 2. Tombol di dalam form/card dengan background kontras/berwarna dan area terbesar
     primary_btn_node: dict[str, Any] | None = None
+    best_btn_score = -1.0
     for n in nodes:
         if not isinstance(n, dict):
             continue
@@ -1082,11 +1086,26 @@ def _extract_visual_theme(visual: dict[str, Any]) -> dict[str, Any]:
         if is_btn:
             style = n.get("style") or {}
             bg = style.get("backgroundColor", "")
-            # Prefer button yang memiliki background warna (bukan transparan) atau submit
-            if itype == "submit" or "rgb(0, 0, 0)" in bg or (bg and bg != "rgba(0, 0, 0, 0)" and bg != "transparent"):
+            box = n.get("box") or {}
+            area = float(box.get("w", 0)) * float(box.get("h", 0))
+
+            score = 0.0
+            if itype == "submit":
+                score += 100000.0
+            # Jika ada background kontras/warna (bukan transparan atau abu-abu sangat muda rgb(245..))
+            if bg and bg not in ("rgba(0, 0, 0, 0)", "transparent"):
+                score += 1000.0
+                if "rgb(245, 245, 244)" in bg:
+                    # Penalti untuk pil abu-abu sekunder
+                    score -= 500.0
+                elif "rgb(17, 24, 39)" in bg or "rgb(0, 0, 0)" in bg:
+                    # Prioritas untuk tombol gelap/kontras tinggi
+                    score += 1500.0
+            score += area
+
+            if score > best_btn_score:
+                best_btn_score = score
                 primary_btn_node = n
-                if itype == "submit":
-                    break
 
     if primary_btn_node is not None:
         style = primary_btn_node.get("style") or {}
@@ -1100,16 +1119,53 @@ def _extract_visual_theme(visual: dict[str, Any]) -> dict[str, Any]:
     # Cari heading dan body text node
     heading_node: dict[str, Any] | None = None
     body_node: dict[str, Any] | None = None
+    best_body_score = -1.0
+
+    def _parse_px(val: Any) -> float:
+        if not val:
+            return 0.0
+        m = re.search(r"([\d.]+)", str(val))
+        return float(m.group(1)) if m else 0.0
+
+    def _parse_weight(val: Any) -> int:
+        if not val or str(val).lower() == "none" or str(val).lower() == "normal":
+            return 400
+        if str(val).lower() == "bold":
+            return 700
+        try:
+            return int(val)
+        except (ValueError, TypeError):
+            return 400
+
     for n in nodes:
         if not isinstance(n, dict):
             continue
         tag = (n.get("tag") or "").lower().strip()
         if heading_node is None and tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
             heading_node = n
-        if body_node is None and tag in ("p", "span") and n.get("text"):
-            body_node = n
-        if heading_node and body_node:
-            break
+
+        # Evaluasi kandidat body text: prioritas tag <p> atau teks body dengan fontSize >= 13px dan fontWeight <= 500
+        if tag in ("p", "span", "div") and n.get("text"):
+            style = n.get("style") or {}
+            f_size = _parse_px(style.get("fontSize"))
+            f_weight = _parse_weight(style.get("fontWeight"))
+
+            # Penalti untuk teks tombol atau header/footer kecil
+            score = 0.0
+            if tag == "p":
+                score += 100.0
+            if f_size >= 13.0:
+                score += 50.0
+            elif f_size >= 12.0:
+                score += 20.0
+            if f_weight <= 500:
+                score += 30.0
+            elif f_weight >= 700:
+                score -= 30.0
+
+            if score > best_body_score:
+                best_body_score = score
+                body_node = n
 
     text_theme: dict[str, Any] = {}
     if heading_node is not None:

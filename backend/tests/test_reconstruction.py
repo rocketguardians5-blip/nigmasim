@@ -2021,6 +2021,74 @@ def test_extract_visual_theme_commit3_unit():
     assert _json_size_bytes(theme) <= 2048
 
 
+def test_extract_visual_theme_prioritizes_submit_over_pills_and_body_over_small_labels():
+    """Unit test perbaikan tema: tombol submit utama diprioritaskan di atas pill abu-abu, dan body p di atas label kecil."""
+    from app.services.reconstructor import _extract_visual_theme
+
+    visual = {
+        "page": {"backgroundColor": "#fafaf9"},
+        "nodes": [
+            # Pill abu-abu sekunder (misalnya Auto-fill)
+            {
+                "id": "btn_pill",
+                "tag": "button",
+                "text": "Auto-fill",
+                "box": {"x": 600, "y": 680, "w": 180, "h": 25},
+                "style": {
+                    "backgroundColor": "rgb(245, 245, 244)",
+                    "color": "rgb(68, 64, 60)",
+                    "borderRadius": "9999px",
+                },
+            },
+            # Tombol submit utama (kontras tinggi, area besar)
+            {
+                "id": "btn_main_submit",
+                "tag": "button",
+                "text": "Masuk ke Portal",
+                "box": {"x": 550, "y": 570, "w": 330, "h": 48},
+                "style": {
+                    "backgroundColor": "rgb(17, 24, 39)",
+                    "color": "rgb(255, 255, 255)",
+                    "borderRadius": "9999px",
+                    "fontWeight": "700",
+                },
+            },
+            # Label kecil dengan font 11px & weight 700 (seharusnya tidak dijadikan body utama)
+            {
+                "id": "lbl_small",
+                "tag": "span",
+                "text": "Versi 2.4",
+                "style": {
+                    "fontSize": "11px",
+                    "fontWeight": "700",
+                    "color": "rgb(87, 83, 78)",
+                },
+            },
+            # Paragraf penjelasan body (fontSize >= 13px, weight <= 500)
+            {
+                "id": "body_desc",
+                "tag": "p",
+                "text": "Silakan masukkan email dan password akun terdaftar Anda.",
+                "style": {
+                    "fontSize": "14px",
+                    "fontWeight": "400",
+                    "color": "rgb(100, 100, 100)",
+                },
+            },
+        ],
+    }
+
+    theme = _extract_visual_theme(visual)
+
+    # Harus memilih tombol submit utama (rgb(17, 24, 39)), bukan tombol pill (rgb(245, 245, 244))
+    assert theme["primary"]["backgroundColor"] == "rgb(17, 24, 39)"
+    assert theme["primary"]["color"] == "rgb(255, 255, 255)"
+
+    # Harus memilih body paragraph (14px, weight 400), bukan label kecil (11px, weight 700)
+    assert theme["text"]["body"]["fontSize"] == "14px"
+    assert theme["text"]["body"]["color"] == "rgb(100, 100, 100)"
+
+
 def test_store_analysis_preserves_layout_theme_and_header(
     client: TestClient,
     auth_headers: dict[str, str],
