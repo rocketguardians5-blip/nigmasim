@@ -207,7 +207,7 @@ def _group_for(element_type: str) -> str:
         return "action"
     if lowered in NAV_TYPES:
         return "nav"
-    if lowered in {"heading", "logo", "card", "table"}:
+    if lowered in {"heading", "logo", "card", "table", "text"}:
         return lowered
     return "other"
 
@@ -304,7 +304,7 @@ USABILITY_WARNING = (
 
 
 def _usable_generator_elements(draft: Reconstruction) -> list[dict[str, Any]]:
-    """Elemen yang benar-benar diterima generator dan berasal dari AI Vision/manual.
+    """Elemen yang benar-benar diterima generator dan berasal dari AI Vision/manual/DOM.
 
     Memakai _collect_elements() supaya filter label, tombstone, deduplikasi, dan
     aturan grup komponen selalu sama dengan yang dipakai saat generate simulasi.
@@ -314,7 +314,7 @@ def _usable_generator_elements(draft: Reconstruction) -> list[dict[str, Any]]:
     return [
         element
         for element in elements
-        if (element.get("source") or "").lower() in ("ai-vision", "manual")
+        if (element.get("source") or "").lower() in ("ai-vision", "manual", "dom")
     ]
 
 
@@ -411,7 +411,279 @@ def _field_options(label: str, element_type: str) -> list[str] | None:
     return None
 
 
-def _build_field(element: dict[str, Any], used_keys: set[str]) -> dict[str, Any] | None:
+SAFE_CSS_PROPERTIES = {
+    "backgroundColor",
+    "color",
+    "borderColor",
+    "borderWidth",
+    "borderRadius",
+    "boxShadow",
+    "padding",
+    "fontSize",
+    "fontWeight",
+    "fontFamily",
+    "textAlign",
+    "lineHeight",
+    "letterSpacing",
+}
+
+
+def _extract_safe_style(style_dict: Any) -> dict[str, Any] | None:
+    if not isinstance(style_dict, dict):
+        return None
+    safe: dict[str, Any] = {}
+    for key, val in style_dict.items():
+        if key in SAFE_CSS_PROPERTIES and isinstance(val, (str, int, float)):
+            val_str = str(val).strip()
+            if any(forbidden in val_str.lower() for forbidden in ("javascript:", "expression(", "url(")):
+                continue
+            safe[key] = val
+    return safe or None
+
+
+def _extract_safe_icon_svg(icon_val: Any) -> str | None:
+    if not icon_val:
+        return None
+    svg_str = None
+    if isinstance(icon_val, dict):
+        svg_candidate = icon_val.get("svg")
+        if isinstance(svg_candidate, str):
+            svg_str = svg_candidate.strip()
+    elif isinstance(icon_val, str) and "<svg" in icon_val:
+        svg_str = icon_val.strip()
+
+    if not svg_str or len(svg_str) > 8192:
+        return None
+    if not (svg_str.startswith("<svg") and svg_str.endswith("</svg>")):
+        return None
+    lower_svg = svg_str.lower()
+    if any(tag in lower_svg for tag in ("<script", "javascript:", "onload=", "onerror=", "onclick=")):
+        return None
+    return svg_str
+
+
+def _parse_px(val: Any) -> float:
+    if not val:
+        return 0.0
+    m = re.search(r"([\d.]+)", str(val))
+    return float(m.group(1)) if m else 0.0
+
+
+def _parse_weight(val: Any) -> int:
+    if not val or str(val).lower() in ("none", "normal"):
+        return 400
+    if str(val).lower() == "bold":
+        return 700
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return 400
+
+
+def _detect_password_toggle(
+    field_element: dict[str, Any],
+    screen: Screen | None,
+    elements: list[dict[str, Any]],
+) -> bool:
+    props = field_element.get("props") or {}
+    if props.get("toggleVisibility") is not None:
+        return bool(props["toggleVisibility"])
+
+    for el in elements:
+        label = (el.get("label") or "").lower()
+        if any(word in label for word in ("toggle visibility", "lihat password", "show password", "mata", "eye", "lihat")):
+            return True
+
+    if screen and screen.structure and isinstance(screen.structure, dict):
+        visual = screen.structure.get("visual")
+        if isinstance(visual, dict) and isinstance(visual.get("nodes"), list):
+            nodes = visual["nodes"]
+            pwd_box = None
+            for n in nodes:
+                if not isinstance(n, dict):
+                    continue
+                if (n.get("tag") == "input" and n.get("inputType") == "password") or "password" in (n.get("text") or "").lower():
+                    if n.get("inputType") == "password":
+                        pwd_box = n.get("box")
+                        break
+
+            for n in nodes:
+                if not isinstance(n, dict):
+                    continue
+                icon = n.get("icon") or {}
+                svg_str = icon.get("svg", "") if isinstance(icon, dict) else (icon if isinstance(icon, str) else "")
+                if any(k in svg_str.lower() for k in ("showpassword", "eye", "m15 12a3 3 0", "m2.458 12")):
+                    return True
+
+                if pwd_box and n.get("tag") in ("button", "svg", "span"):
+                    box = n.get("box") or {}
+                    if box and pwd_box:
+                        bx, by, bw, bh = box.get("x", 0), box.get("y", 0), box.get("w", 0), box.get("h", 0)
+                        px, py, pw, ph = pwd_box.get("x", 0), pwd_box.get("y", 0), pwd_box.get("w", 0), pwd_box.get("h", 0)
+                        if abs(by - py) < 25 and (px + pw - 60) <= bx <= (px + pw + 15) and bw < 60:
+                            return True
+    return False
+
+
+def _find_link_right(
+    elements: list[dict[str, Any]],
+    screen: Screen | None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    for el in elements:
+        label = el.get("label") or ""
+        lowered = _normalize(label)
+        if any(term in lowered for term in ("lupa password", "lupa kata sandi", "lupa sandi", "forgot password", "reset password")):
+            return {"label": label, "action": f"Aksi simulasi: {label}."}, el
+
+    if screen and screen.structure and isinstance(screen.structure, dict):
+        visual = screen.structure.get("visual")
+        if isinstance(visual, dict) and isinstance(visual.get("nodes"), list):
+            for n in visual["nodes"]:
+                if not isinstance(n, dict):
+                    continue
+                text = (n.get("text") or "").strip()
+                lowered = _normalize(text)
+                if any(term in lowered for term in ("lupa password", "lupa kata sandi", "lupa sandi", "forgot password", "reset password")):
+                    return {"label": text, "action": f"Aksi simulasi: {text}."}, None
+    return None, None
+
+
+def _extract_dom_headings(screen: Screen | None, elements: list[dict[str, Any]]) -> tuple[str | None, str | None]:
+    if not screen or not screen.structure or not isinstance(screen.structure, dict):
+        return None, None
+    visual = screen.structure.get("visual")
+    if not isinstance(visual, dict) or not isinstance(visual.get("nodes"), list):
+        return None, None
+
+    nodes = visual["nodes"]
+    heading_text: str | None = None
+    subtitle_text: str | None = None
+
+    best_h_score = -1.0
+    best_h_node = None
+    for n in nodes:
+        if not isinstance(n, dict):
+            continue
+        text = (n.get("text") or "").strip()
+        if not text or len(text) > 80:
+            continue
+        tag = (n.get("tag") or "").lower().strip()
+        style = n.get("style") or {}
+        font_size = _parse_px(style.get("fontSize"))
+        font_weight = _parse_weight(style.get("fontWeight"))
+
+        score = 0.0
+        if tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
+            score += 50
+        if font_size >= 20:
+            score += 40
+        elif font_size >= 16:
+            score += 20
+        if font_weight >= 700:
+            score += 30
+        elif font_weight >= 600:
+            score += 15
+
+        if score > best_h_score and score >= 35:
+            best_h_score = score
+            best_h_node = n
+
+    if best_h_node:
+        heading_text = (best_h_node.get("text") or "").strip()
+        h_box = best_h_node.get("box") or {}
+        h_y = float(h_box.get("y", 0))
+        best_p_node = None
+        min_y_dist = float("inf")
+
+        for n in nodes:
+            if not isinstance(n, dict) or n is best_h_node:
+                continue
+            text = (n.get("text") or "").strip()
+            if not text or len(text) > 150:
+                continue
+            tag = (n.get("tag") or "").lower().strip()
+            if tag not in ("p", "div", "span"):
+                continue
+            n_box = n.get("box") or {}
+            n_y = float(n_box.get("y", 0))
+            if n_y > h_y and (n_y - h_y) < 120:
+                dist = n_y - h_y
+                if dist < min_y_dist:
+                    min_y_dist = dist
+                    best_p_node = n
+
+        if best_p_node:
+            subtitle_text = (best_p_node.get("text") or "").strip()
+
+    return heading_text, subtitle_text
+
+
+def _extract_auth_fields_from_dom(screen: Screen | None) -> list[dict[str, Any]]:
+    if not screen or not screen.structure or not isinstance(screen.structure, dict):
+        return []
+    visual = screen.structure.get("visual")
+    if not isinstance(visual, dict) or not isinstance(visual.get("nodes"), list):
+        return []
+
+    nodes = visual["nodes"]
+    inputs = [n for n in nodes if isinstance(n, dict) and n.get("tag") in ("input", "textarea", "select")]
+    if not inputs:
+        return []
+
+    elements: list[dict[str, Any]] = []
+    for inp in inputs:
+        inp_type = (inp.get("inputType") or "text").lower()
+        inp_y = float(inp.get("box", {}).get("y", 0))
+        inp_x = float(inp.get("box", {}).get("x", 0))
+        lbl = None
+
+        if inp_type == "checkbox":
+            for n in nodes:
+                if not isinstance(n, dict) or not n.get("text"):
+                    continue
+                ny = float(n.get("box", {}).get("y", 0))
+                nx = float(n.get("box", {}).get("x", 0))
+                if abs(ny - inp_y) < 15 and 0 < (nx - inp_x) < 90:
+                    lbl = n.get("text")
+                    break
+            if not lbl:
+                lbl = "Ingat Saya"
+        else:
+            min_dist = float("inf")
+            for n in nodes:
+                if not isinstance(n, dict) or not n.get("text"):
+                    continue
+                tag = (n.get("tag") or "").lower()
+                if tag in ("label", "span", "div", "p"):
+                    ny = float(n.get("box", {}).get("y", 0))
+                    if 0 < (inp_y - ny) < 50:
+                        dist = inp_y - ny
+                        if dist < min_dist:
+                            min_dist = dist
+                            lbl = n.get("text")
+            if not lbl:
+                lbl = "Password" if inp_type == "password" else "Email / Username"
+
+        el_type = "checkbox" if inp_type == "checkbox" else ("input" if inp_type in ("text", "email", "password") else inp_type)
+        elements.append({
+            "type": el_type,
+            "label": str(lbl).strip(),
+            "region": "main",
+            "props": {
+                "dom": inp,
+            },
+            "source": "dom",
+            "component_id": None,
+        })
+
+    return elements
+
+
+def _build_field(
+    element: dict[str, Any],
+    used_keys: set[str],
+    screen: Screen | None = None,
+) -> dict[str, Any] | None:
     label = element["label"]
     base_key = _key_from_label(label)
     key = base_key
@@ -434,6 +706,78 @@ def _build_field(element: dict[str, Any], used_keys: set[str]) -> dict[str, Any]
     }
     if options:
         field["options"] = [{"value": option, "label": option} for option in options]
+
+    props = element.get("props") or {}
+    dom_props = props.get("dom") or {}
+
+    # Placeholder: prioritaskan DOM placeholder asli jika ada
+    dom_placeholder = dom_props.get("placeholder") or props.get("placeholder")
+    if not dom_placeholder and screen and screen.structure and isinstance(screen.structure, dict):
+        visual = screen.structure.get("visual")
+        if isinstance(visual, dict) and isinstance(visual.get("nodes"), list):
+            for n in visual["nodes"]:
+                if not isinstance(n, dict):
+                    continue
+                tag = (n.get("tag") or "").lower()
+                n_type = (n.get("inputType") or "").lower()
+                if tag in ("input", "textarea") and n.get("placeholder"):
+                    if (field_type == "password" and n_type == "password") or (
+                        field_type in ("email", "text") and n_type in ("email", "text")
+                    ):
+                        dom_placeholder = n.get("placeholder")
+                        break
+
+    if dom_placeholder and isinstance(dom_placeholder, str) and dom_placeholder.strip():
+        clean_ph = dom_placeholder.strip()
+        if "[email disemaskan]" in clean_ph.lower():
+            clean_ph = "nama@contoh.com"
+        field["placeholder"] = clean_ph
+
+    # Style: ambil CSS aman yang didukung renderer
+    safe_style = _extract_safe_style(dom_props.get("style") or props.get("style"))
+    if not safe_style and screen and screen.structure and isinstance(screen.structure, dict):
+        visual = screen.structure.get("visual")
+        if isinstance(visual, dict) and isinstance(visual.get("nodes"), list):
+            for n in visual["nodes"]:
+                if not isinstance(n, dict):
+                    continue
+                tag = (n.get("tag") or "").lower()
+                n_type = (n.get("inputType") or "").lower()
+                if tag in ("input", "textarea") and n.get("style"):
+                    if (field_type == "password" and n_type == "password") or (
+                        field_type in ("email", "text") and n_type in ("email", "text")
+                    ):
+                        safe_style = _extract_safe_style(n.get("style"))
+                        break
+
+    if safe_style:
+        field["style"] = safe_style
+
+    # IconSvg: ekstrak SVG aman
+    safe_icon = _extract_safe_icon_svg(dom_props.get("icon") or props.get("icon") or props.get("iconSvg"))
+    if not safe_icon and screen and screen.structure and isinstance(screen.structure, dict):
+        visual = screen.structure.get("visual")
+        if isinstance(visual, dict) and isinstance(visual.get("nodes"), list):
+            for n in visual["nodes"]:
+                if not isinstance(n, dict):
+                    continue
+                icon = n.get("icon")
+                if icon:
+                    candidate = _extract_safe_icon_svg(icon)
+                    if candidate:
+                        if field_type == "email" and any(k in candidate.lower() for k in ("m16 12a4", "email", "envelope")):
+                            safe_icon = candidate
+                            break
+                        elif field_type == "password" and any(k in candidate.lower() for k in ("m12 15v2", "lock", "kunci")):
+                            safe_icon = candidate
+                            break
+
+    if safe_icon:
+        field["iconSvg"] = safe_icon
+
+    if props.get("toggleVisibility") is not None:
+        field["toggleVisibility"] = bool(props["toggleVisibility"])
+
     return field
 
 
@@ -608,9 +952,29 @@ def _build_page(
     if not elements:
         return None, [], "Rekonstruksi tidak punya komponen atau section yang bisa dipakai."
 
+    layout = draft.layout if isinstance(draft.layout, dict) else {}
+    theme = layout.get("theme")
+    if not theme and screen and screen.structure and isinstance(screen.structure, dict):
+        visual = screen.structure.get("visual")
+        if isinstance(visual, dict):
+            from app.services.reconstructor import _extract_visual_theme
+            theme = _extract_visual_theme(visual)
+
     title = _find_heading(elements) or screen.title or page_key
     lowered_title = _normalize(f"{title} {route} {screen.title}")
     is_auth = any(word in lowered_title for word in ("login", "masuk", "sign in", "signin"))
+
+    dom_title, dom_subtitle = _extract_dom_headings(screen, elements)
+    if is_auth and dom_title:
+        title = dom_title
+    else:
+        title = _find_heading(elements) or dom_title or screen.title or page_key
+
+    if is_auth and dom_subtitle:
+        subtitle = dom_subtitle
+    else:
+        subtitle = screen.route_label or screen.source_url or ""
+
     table_element = _find_table(elements)
     field_elements = [element for element in elements if _group_for(element["type"]) == "field"]
     # Dropdown environment/profil di header bukan field form halaman.
@@ -632,14 +996,34 @@ def _build_page(
     if is_auth:
         used_keys: set[str] = set()
         fields: list[dict[str, Any]] = []
+        if not field_elements:
+            field_elements = _extract_auth_fields_from_dom(screen)
+
         for element in field_elements:
-            field = _build_field(element, used_keys)
+            field = _build_field(element, used_keys, screen=screen)
             if field:
+                if field.get("type") == "password":
+                    if _detect_password_toggle(element, screen, elements):
+                        field["toggleVisibility"] = True
                 fields.append(field)
         if not fields:
             return None, [], "Layar login tidak punya field yang bisa dibaca dari rekonstruksi."
 
         submit = _find_submit(elements, ("masuk", "login", "sign in", "signin", "submit"))
+        if not submit and screen and screen.structure and isinstance(screen.structure, dict):
+            visual = screen.structure.get("visual")
+            if isinstance(visual, dict) and isinstance(visual.get("nodes"), list):
+                for n in visual["nodes"]:
+                    if not isinstance(n, dict):
+                        continue
+                    tag = (n.get("tag") or "").lower()
+                    t = (n.get("text") or "").strip()
+                    if (tag in ("button", "span", "a") or n.get("inputType") == "submit") and any(
+                        w in t.lower() for w in ("masuk ke portal", "masuk", "login", "sign in", "signin")
+                    ):
+                        if tag not in ("h1", "h2") and len(t) < 30:
+                            submit = {"label": t}
+                            break
         submit_label = submit["label"] if submit else "Masuk"
         form: dict[str, Any] = {
             "type": "form",
@@ -649,31 +1033,32 @@ def _build_page(
             "submitLabel": submit_label,
             "successToast": "Login disimulasikan. Mengarahkan ke halaman aplikasi.",
         }
+
+        link_right, link_el = _find_link_right(elements, screen)
+        if link_right:
+            form["linkRight"] = link_right
+
         prefill = _prefill_from_assumptions(list(draft.assumptions or []), fields)
+        if not prefill and any(f.get("type") == "email" for f in fields) and any(f.get("type") == "password" for f in fields):
+            prefill = {"email_username": "admin@nigma.id", "password": "password"}
         if prefill:
             form["prefill"] = {"label": "Isi Otomatis (Demo)", "values": prefill}
         sections.append(form)
 
-        actions = []
-        for element in action_elements:
-            if submit and element["component_id"] == submit.get("component_id") and element["label"] == submit["label"]:
-                continue
-            if any(word in _normalize(element["label"]) for word in ("auto-fill", "isi otomatis", "autofill")):
-                continue
-            actions.append(_action_from_element(element))
-        actions = _dedupe_actions(actions)
-        if actions:
-            sections.append({"type": "actions", "title": "Aksi lain", "items": actions})
+        # Khusus halaman login/auth: hindari menambahkan section generik "Aksi lain" yang tidak ada di layar asli.
+        page_dict: dict[str, Any] = {
+            "key": page_key,
+            "title": title,
+            "route": route,
+            "subtitle": subtitle,
+            "kind": "auth",
+            "sections": sections,
+        }
+        if theme:
+            page_dict["theme"] = theme
 
         return (
-            {
-                "key": page_key,
-                "title": title,
-                "route": route,
-                "subtitle": screen.route_label or screen.source_url or "",
-                "kind": "auth",
-                "sections": sections,
-            },
+            page_dict,
             datasets,
             None,
         )
@@ -696,15 +1081,19 @@ def _build_page(
         if actions:
             sections.append({"type": "actions", "title": "Aksi halaman", "items": actions})
 
+        page_dict = {
+            "key": page_key,
+            "title": title,
+            "route": route,
+            "subtitle": subtitle,
+            "kind": "table",
+            "sections": sections,
+        }
+        if theme:
+            page_dict["theme"] = theme
+
         return (
-            {
-                "key": page_key,
-                "title": title,
-                "route": route,
-                "subtitle": screen.route_label or screen.source_url or "",
-                "kind": "table",
-                "sections": sections,
-            },
+            page_dict,
             datasets,
             None,
         )
@@ -714,7 +1103,7 @@ def _build_page(
         used_keys = set()
         fields = []
         for element in main_field_elements:
-            field = _build_field(element, used_keys)
+            field = _build_field(element, used_keys, screen=screen)
             if field:
                 fields.append(field)
         submit = _find_submit(elements, ("send", "kirim", "simpan", "submit", "jalankan", "cari"))
@@ -774,15 +1163,19 @@ def _build_page(
     if not sections:
         return None, [], "Tidak ada komponen/section yang bisa dipakai."
 
+    page_dict = {
+        "key": page_key,
+        "title": title,
+        "route": route,
+        "subtitle": subtitle,
+        "kind": "dashboard" if not main_field_elements else "custom",
+        "sections": sections,
+    }
+    if theme:
+        page_dict["theme"] = theme
+
     return (
-        {
-            "key": page_key,
-            "title": title,
-            "route": route,
-            "subtitle": screen.route_label or screen.source_url or "",
-            "kind": "dashboard" if not main_field_elements else "custom",
-            "sections": sections,
-        },
+        page_dict,
         datasets,
         None,
     )
