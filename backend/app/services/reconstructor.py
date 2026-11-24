@@ -1037,6 +1037,168 @@ def _match_visual_nodes(
     return matched_components
 
 
+def _extract_visual_theme(visual: dict[str, Any]) -> dict[str, Any]:
+    """Ekstraksi tema visual sederhana dari struktur DOM (maksimal 2 KB).
+    
+    Menghasilkan:
+    - page: {backgroundColor, fontFamily}
+    - card: {box, backgroundColor, borderColor, borderWidth, borderRadius, boxShadow, padding}
+      (kartu terbesar yang memuat input/tombol)
+    - primary: {backgroundColor, color, borderRadius, fontWeight}
+      (dari tombol submit / CTA utama)
+    - text: {color, fontSize, fontWeight} untuk heading dan body
+    """
+    if not isinstance(visual, dict):
+        return {}
+
+    theme: dict[str, Any] = {}
+
+    # 1. Page level styling
+    page_style = visual.get("page")
+    if isinstance(page_style, dict):
+        page_theme: dict[str, Any] = {}
+        if page_style.get("backgroundColor"):
+            page_theme["backgroundColor"] = str(page_style["backgroundColor"])
+        if page_style.get("fontFamily"):
+            page_theme["fontFamily"] = str(page_style["fontFamily"])
+        if page_theme:
+            theme["page"] = page_theme
+
+    nodes = visual.get("nodes")
+    if not isinstance(nodes, list):
+        return theme
+
+    # Cari primary button (submit atau button CTA)
+    primary_btn_node: dict[str, Any] | None = None
+    for n in nodes:
+        if not isinstance(n, dict):
+            continue
+        tag = (n.get("tag") or "").lower().strip()
+        itype = (n.get("inputType") or "").lower().strip()
+        is_btn = tag == "button" or (tag == "input" and itype in ("submit", "button"))
+        if is_btn:
+            style = n.get("style") or {}
+            bg = style.get("backgroundColor", "")
+            # Prefer button yang memiliki background warna (bukan transparan) atau submit
+            if itype == "submit" or "rgb(0, 0, 0)" in bg or (bg and bg != "rgba(0, 0, 0, 0)" and bg != "transparent"):
+                primary_btn_node = n
+                if itype == "submit":
+                    break
+
+    if primary_btn_node is not None:
+        style = primary_btn_node.get("style") or {}
+        btn_theme: dict[str, Any] = {}
+        for key in ("backgroundColor", "color", "borderRadius", "fontWeight"):
+            if style.get(key):
+                btn_theme[key] = str(style[key])
+        if btn_theme:
+            theme["primary"] = btn_theme
+
+    # Cari heading dan body text node
+    heading_node: dict[str, Any] | None = None
+    body_node: dict[str, Any] | None = None
+    for n in nodes:
+        if not isinstance(n, dict):
+            continue
+        tag = (n.get("tag") or "").lower().strip()
+        if heading_node is None and tag in ("h1", "h2", "h3", "h4", "h5", "h6"):
+            heading_node = n
+        if body_node is None and tag in ("p", "span") and n.get("text"):
+            body_node = n
+        if heading_node and body_node:
+            break
+
+    text_theme: dict[str, Any] = {}
+    if heading_node is not None:
+        h_style = heading_node.get("style") or {}
+        h_theme = {
+            k: str(h_style[k])
+            for k in ("color", "fontSize", "fontWeight")
+            if h_style.get(k)
+        }
+        if h_theme:
+            text_theme["heading"] = h_theme
+
+    if body_node is not None:
+        b_style = body_node.get("style") or {}
+        b_theme = {
+            k: str(b_style[k])
+            for k in ("color", "fontSize", "fontWeight")
+            if b_style.get(k)
+        }
+        if b_theme:
+            text_theme["body"] = b_theme
+
+    if text_theme:
+        theme["text"] = text_theme
+
+    # Cari card: elemen container (div/section/form/main) terbesar yang memuat input/button
+    input_or_btn_node_ids = set()
+    for n in nodes:
+        if isinstance(n, dict):
+            tag = (n.get("tag") or "").lower().strip()
+            if tag in ("input", "button", "textarea", "select"):
+                input_or_btn_node_ids.add(n.get("id"))
+
+    # Map parent hierarchy
+    node_by_id = {n.get("id"): n for n in nodes if isinstance(n, dict) and n.get("id")}
+    card_candidates: dict[str, int] = {}
+    for iid in input_or_btn_node_ids:
+        cur = node_by_id.get(iid)
+        while cur and cur.get("parent"):
+            pid = cur.get("parent")
+            parent_node = node_by_id.get(pid)
+            if not parent_node:
+                break
+            ptag = (parent_node.get("tag") or "").lower().strip()
+            if ptag in ("div", "section", "form", "main", "article"):
+                card_candidates[pid] = card_candidates.get(pid, 0) + 1
+            cur = parent_node
+
+    best_card: dict[str, Any] | None = None
+    best_card_area: float = 0.0
+    for cid, count in card_candidates.items():
+        if count >= 1:
+            c_node = node_by_id.get(cid)
+            if c_node:
+                c_box = c_node.get("box") or {}
+                area = float(c_box.get("w", 0)) * float(c_box.get("h", 0))
+                c_style = c_node.get("style") or {}
+                has_styling = bool(
+                    c_style.get("borderRadius")
+                    or c_style.get("boxShadow")
+                    or (c_style.get("borderWidth") and c_style.get("borderWidth") != "0px")
+                )
+                if has_styling and area > best_card_area:
+                    best_card_area = area
+                    best_card = c_node
+
+    if best_card is not None:
+        c_style = best_card.get("style") or {}
+        card_theme: dict[str, Any] = {}
+        if best_card.get("box"):
+            card_theme["box"] = best_card["box"]
+        for key in (
+            "backgroundColor",
+            "borderColor",
+            "borderWidth",
+            "borderRadius",
+            "boxShadow",
+            "padding",
+        ):
+            if c_style.get(key):
+                card_theme[key] = str(c_style[key])
+        if card_theme:
+            theme["card"] = card_theme
+
+    redacted_theme = _redact_layout_value(theme)
+    if not isinstance(redacted_theme, dict):
+        return {}
+    if _json_size_bytes(redacted_theme) > 2048:
+        redacted_theme.pop("card", None)
+    return redacted_theme
+
+
 def store_analysis(
     db: Session,
     screen: Screen,
@@ -1110,11 +1272,18 @@ def store_analysis(
         new_layout.pop("ai_result_truncated", None)
         new_layout.pop("ai_result_size_bytes", None)
 
+    screen_structure = screen.structure if isinstance(screen.structure, dict) else {}
+    if "visual" in screen_structure and isinstance(screen_structure["visual"], dict):
+        analysis.components = _match_visual_nodes(analysis.components, screen_structure["visual"])
+        extracted_theme = _extract_visual_theme(screen_structure["visual"])
+        if extracted_theme:
+            new_layout["theme"] = extracted_theme
+
     generated_by = _generated_by_for_source(analysis.source)
     if existing is not None:
         reconstruction = existing
         reconstruction.status = "draft"
-        reconstruction.layout = new_layout
+        reconstruction.layout = dict(new_layout)
         reconstruction.code_text = code
         reconstruction.generated_by = generated_by
         reconstruction.reviewed_by = None
@@ -1135,7 +1304,7 @@ def store_analysis(
             screen_id=screen.id,
             project_id=screen.project_id,
             status="draft",
-            layout=new_layout,
+            layout=dict(new_layout),
             code_text=code,
             generated_by=generated_by,
             created_by=actor_id,
@@ -1151,10 +1320,6 @@ def store_analysis(
         for c in reconstruction.components
         if c.region == "manual" or c.source == "manual"
     ]
-
-    screen_structure = screen.structure if isinstance(screen.structure, dict) else {}
-    if "visual" in screen_structure and isinstance(screen_structure["visual"], dict):
-        analysis.components = _match_visual_nodes(analysis.components, screen_structure["visual"])
 
     safe_analysis_components = [
         _sanitize_result_component(component)
@@ -1853,6 +2018,9 @@ Output HANYA JSON valid sesuai format di system prompt."""
         structure = screen.structure if isinstance(screen.structure, dict) else {}
         if "visual" in structure:
             existing_analysis.components = _match_visual_nodes(existing_analysis.components, structure["visual"])
+            theme = _extract_visual_theme(structure["visual"])
+            if theme and isinstance(existing_analysis.layout, dict):
+                existing_analysis.layout["theme"] = theme
 
         # Merge AI assumptions (avoid duplicates)
         raw_assumptions = safe_ai_result.get("assumptions", [])
@@ -2309,6 +2477,9 @@ def analyze_screen_with_ai(screen: Screen, elements: list[ScreenElement]) -> Ana
     result.components = _structure_to_components(structure, viewport, elements)
     if isinstance(structure, dict) and "visual" in structure:
         result.components = _match_visual_nodes(result.components, structure["visual"])
+        theme = _extract_visual_theme(structure["visual"])
+        if theme and isinstance(result.layout, dict):
+            result.layout["theme"] = theme
 
     # Asumsi dasar
     result.assumptions = [

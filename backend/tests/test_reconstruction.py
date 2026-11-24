@@ -1923,5 +1923,165 @@ def test_static_text_components_from_dom_commit2():
     assert len(result_large) == 30, f"Batas 30 dilanggar, didapat: {len(result_large)}"
 
 
+def test_extract_visual_theme_commit3_unit():
+    """Commit 3: Ekstraksi tema visual DOM dan penyimpanan di layout.theme."""
+    from app.services.reconstructor import _extract_visual_theme, _json_size_bytes
+
+    visual = {
+        "page": {
+            "backgroundColor": "rgb(250, 250, 249)",
+            "fontFamily": "'Plus Jakarta Sans', sans-serif",
+        },
+        "viewport": {"w": 1440, "h": 900},
+        "nodes": [
+            {
+                "id": "card_container",
+                "parent": None,
+                "tag": "div",
+                "box": {"x": 480, "y": 180, "w": 480, "h": 500},
+                "style": {
+                    "backgroundColor": "rgb(255, 255, 255)",
+                    "borderColor": "rgb(229, 231, 235)",
+                    "borderWidth": "1px",
+                    "borderRadius": "12px",
+                    "boxShadow": "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
+                    "padding": "32px",
+                },
+            },
+            {
+                "id": "h1_node",
+                "parent": "card_container",
+                "tag": "h1",
+                "text": "Login Portal",
+                "box": {"x": 512, "y": 212, "w": 416, "h": 36},
+                "style": {
+                    "color": "rgb(17, 24, 39)",
+                    "fontSize": "24px",
+                    "fontWeight": "700",
+                },
+            },
+            {
+                "id": "p_node",
+                "parent": "card_container",
+                "tag": "p",
+                "text": "Masukkan kredensial Anda",
+                "box": {"x": 512, "y": 256, "w": 416, "h": 20},
+                "style": {
+                    "color": "rgb(107, 114, 128)",
+                    "fontSize": "14px",
+                    "fontWeight": "400",
+                },
+            },
+            {
+                "id": "input_email",
+                "parent": "card_container",
+                "tag": "input",
+                "inputType": "email",
+                "box": {"x": 512, "y": 300, "w": 416, "h": 40},
+            },
+            {
+                "id": "submit_btn",
+                "parent": "card_container",
+                "tag": "button",
+                "inputType": "submit",
+                "text": "Masuk Sekarang",
+                "box": {"x": 512, "y": 360, "w": 416, "h": 44},
+                "style": {
+                    "backgroundColor": "rgb(37, 99, 235)",
+                    "color": "rgb(255, 255, 255)",
+                    "borderRadius": "8px",
+                    "fontWeight": "600",
+                },
+            },
+        ],
+    }
+
+    theme = _extract_visual_theme(visual)
+
+    # Verifikasi page
+    assert theme["page"]["backgroundColor"] == "rgb(250, 250, 249)"
+    assert "Plus Jakarta Sans" in theme["page"]["fontFamily"]
+
+    # Verifikasi card
+    assert theme["card"]["borderRadius"] == "12px"
+    assert theme["card"]["padding"] == "32px"
+    assert theme["card"]["borderWidth"] == "1px"
+
+    # Verifikasi primary button
+    assert theme["primary"]["backgroundColor"] == "rgb(37, 99, 235)"
+    assert theme["primary"]["color"] == "rgb(255, 255, 255)"
+    assert theme["primary"]["borderRadius"] == "8px"
+
+    # Verifikasi text
+    assert theme["text"]["heading"]["fontSize"] == "24px"
+    assert theme["text"]["heading"]["fontWeight"] == "700"
+    assert theme["text"]["body"]["fontSize"] == "14px"
+
+    # Batas ukuran <= 2 KB
+    assert _json_size_bytes(theme) <= 2048
+
+
+def test_store_analysis_preserves_layout_theme_and_header(
+    client: TestClient,
+    auth_headers: dict[str, str],
+    project_id: int,
+) -> None:
+    """Pastikan store_analysis menyimpan layout.theme tanpa menghapus layout.regions.header atau tombstones."""
+    from app.services.reconstructor import store_analysis, Analysis
+    from app.models.capture import Screen
+
+    screen_id = _make_screen(project_id, screen_key="screen-theme-test")
+    with SessionLocal() as db_session:
+        screen = db_session.get(Screen, screen_id)
+        assert screen is not None
+        screen.structure = {
+            "viewport": {"width": 1440, "height": 900},
+            "visual": {
+                "page": {"backgroundColor": "#fafafa"},
+                "nodes": [
+                    {
+                        "id": "btn_1",
+                        "tag": "button",
+                        "inputType": "submit",
+                        "box": {"x": 100, "y": 100, "w": 200, "h": 50},
+                        "style": {"backgroundColor": "rgb(0, 0, 0)", "color": "#fff"},
+                    }
+                ],
+            },
+        }
+        db_session.commit()
+
+        analysis = Analysis()
+        analysis.source = "rule"
+        analysis.components = []
+        analysis.layout = {
+            "regions": {
+                "header": {"x": 0, "y": 0, "w": 1440, "h": 80},
+                "sidebar": {"x": 0, "y": 80, "w": 240, "h": 820},
+                "main": {"x": 240, "y": 80, "w": 1200, "h": 820},
+            },
+            "tombstones": ["comp_deleted_1"],
+            "overrides": {"comp_1": {"label": "Manual Override"}},
+        }
+
+        recon = store_analysis(db_session, screen, analysis, "<div>Test</div>", actor_id=1)
+        db_session.commit()
+
+    response = client.get(
+        f"/api/v1/reconstructions/screen/{screen_id}", headers=auth_headers
+    )
+    assert response.status_code == 200, response.text
+    layout = response.json()["layout"]
+
+    assert "theme" in layout
+    assert layout["theme"]["page"]["backgroundColor"] == "#fafafa"
+    assert layout["theme"]["primary"]["backgroundColor"] == "rgb(0, 0, 0)"
+
+    # Header region, tombstones, dan overrides tetap terjaga
+    assert layout["regions"]["header"] == {"x": 0, "y": 0, "w": 1440, "h": 80}
+    assert "comp_deleted_1" in layout["tombstones"]
+    assert "comp_1" in layout["overrides"]
+
+
 
 
