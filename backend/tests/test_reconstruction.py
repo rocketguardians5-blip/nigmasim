@@ -1479,6 +1479,9 @@ def test_ai_result_allowlist_and_dlp_excludes_sensitive_output_fields(
             "authorization": f"Bearer {secret}",
         },
         layout_extra={
+            "http_headers": {"X-Custom": secret},
+            "request_headers": {"X-Custom": secret},
+            "api_key": secret,
             "debug": f"Bearer {secret}",
         },
     )
@@ -1510,6 +1513,9 @@ def test_ai_result_allowlist_and_dlp_excludes_sensitive_output_fields(
     assert "inlineData" not in props
     assert stored["components"][1]["props"]["headers"] == ["ID Risiko", "Judul"]
     assert "http_headers" not in stored["layout"]
+    assert "http_headers" not in layout
+    assert "request_headers" not in layout
+    assert layout["api_key"] == "[DISEMASKAN]"
     assert layout["debug"] == "Bearer [DISEMASKAN]"
 
     # Komponen draf memakai jalur penyimpanan yang sama dan tidak boleh

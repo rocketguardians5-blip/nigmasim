@@ -808,14 +808,19 @@ def store_analysis(
     if existing is not None and not replace:
         return existing
 
-    existing_layout_value = (
-        _redact_layout_value(existing.layout or {}) if existing is not None else {}
-    )
+    existing_layout_raw = (existing.layout or {}) if existing is not None else {}
+    existing_layout_value = _sanitize_result_value(existing_layout_raw)
     existing_layout = (
         dict(existing_layout_value) if isinstance(existing_layout_value, dict) else {}
     )
-    new_layout_value = _redact_layout_value(analysis.layout or {})
+    if isinstance(existing_layout_raw, dict) and isinstance(existing_layout_raw.get("regions"), dict):
+        existing_layout["regions"] = _redact_layout_value(existing_layout_raw["regions"])
+
+    new_layout_raw = analysis.layout or {}
+    new_layout_value = _sanitize_result_value(new_layout_raw)
     new_layout = dict(new_layout_value) if isinstance(new_layout_value, dict) else {}
+    if isinstance(new_layout_raw, dict) and isinstance(new_layout_raw.get("regions"), dict):
+        new_layout["regions"] = _redact_layout_value(new_layout_raw["regions"])
     if "tombstones" in existing_layout and "tombstones" not in new_layout:
         new_layout["tombstones"] = existing_layout["tombstones"]
     if "overrides" in existing_layout and "overrides" not in new_layout:
