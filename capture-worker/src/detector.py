@@ -136,8 +136,14 @@ DOM_DETECTION_SCRIPT = r"""
     if (text && text.length < 100) return text;
     const placeholder = el.getAttribute('placeholder');
     if (placeholder) return placeholder;
-    const value = el.value;
-    if (value && typeof value === 'string' && value.length < 60) return value;
+    const tag = (el.tagName || '').toLowerCase();
+    if (tag === 'input') {
+      const inputType = (el.getAttribute('type') || 'text').toLowerCase();
+      if (inputType === 'submit' || inputType === 'button' || inputType === 'reset') {
+        const value = el.value;
+        if (value && typeof value === 'string' && value.length < 60) return value;
+      }
+    }
     return null;
   };
 
