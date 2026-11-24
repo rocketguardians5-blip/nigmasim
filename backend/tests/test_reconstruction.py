@@ -1689,3 +1689,141 @@ def test_store_analysis_preserves_header_region(
     assert layout_none["regions"]["header"] is None
 
 
+def test_match_visual_nodes_commit1_unit():
+    """Unit test untuk _match_visual_nodes di reconstructor.py."""
+    from app.services.reconstructor import _match_visual_nodes
+
+    visual = {
+        "viewport": {"w": 1000, "h": 1000},
+        "nodes": [
+            {
+                "id": "node_btn_1",
+                "tag": "button",
+                "box": {"x": 100, "y": 100, "w": 200, "h": 50},
+                "text": "Kirim Formulir",
+                "placeholder": None,
+                "inputType": "submit",
+                "style": {"backgroundColor": "rgb(0, 0, 255)", "color": "rgb(255, 255, 255)"},
+            },
+            {
+                "id": "node_inp_1",
+                "tag": "input",
+                "box": {"x": 100, "y": 200, "w": 300, "h": 40},
+                "text": None,
+                "placeholder": "Masukkan nama lengkap",
+                "inputType": "text",
+                "style": {"borderStyle": "solid"},
+            },
+            {
+                "id": "node_far_away",
+                "tag": "button",
+                "box": {"x": 800, "y": 800, "w": 100, "h": 50},
+                "text": "Jauh Sekali",
+                "inputType": "button",
+            },
+            {
+                "id": "node_leak",
+                "tag": "input",
+                "box": {"x": 100, "y": 400, "w": 200, "h": 50},
+                "text": "Bearer eyJhbGciOiJIUzI1NiJ9.rahasia.token AIzaSyD1234567890abcdef",
+                "placeholder": "email rahasia@secret.com",
+                "inputType": "text",
+            },
+        ],
+    }
+
+    # 1. Cocok benar dan teks asli menang atas tebakan
+    components = [
+        {
+            "component_type": "button",
+            "label": "Tombol Kirim (Tebakan)",
+            "props": {
+                # 10% x 1000 = 100, 10% y = 100, 20% w = 200, 5% h = 50 -> IoU 1.0 dengan node_btn_1
+                "box": {"x": 10.0, "y": 10.0, "w": 20.0, "h": 5.0}
+            },
+        },
+        {
+            "component_type": "field",
+            "label": "Input Nama",
+            "props": {
+                # 100, 200, 300, 40 -> IoU 1.0 dengan node_inp_1
+                "box": {"x": 10.0, "y": 20.0, "w": 30.0, "h": 4.0}
+            },
+        },
+        {
+            # IoU jauh di bawah 0.3 terhadap node_far_away (box di 500,500 vs 800,800)
+            "component_type": "button",
+            "label": "Tombol Terisolasi",
+            "props": {
+                "box": {"x": 50.0, "y": 50.0, "w": 5.0, "h": 5.0}
+            },
+        },
+    ]
+
+    matched = _match_visual_nodes(components, visual)
+    assert len(matched) == 3
+
+    # Komponen tombol 1 cocok
+    c_btn = matched[0]
+    assert c_btn["label"] == "Kirim Formulir"
+    assert c_btn["props"]["label_source"] == "dom"
+    assert c_btn["props"]["label_guess"] == "Tombol Kirim (Tebakan)"
+    assert "dom" in c_btn["props"]
+    assert c_btn["props"]["dom"]["node_id"] == "node_btn_1"
+    assert c_btn["props"]["dom"]["text"] == "Kirim Formulir"
+    assert c_btn["props"]["dom"]["inputType"] == "submit"
+    assert c_btn["props"]["dom"]["style"]["backgroundColor"] == "rgb(0, 0, 255)"
+
+    # Komponen field cocok
+    c_inp = matched[1]
+    assert "dom" in c_inp["props"]
+    assert c_inp["props"]["dom"]["node_id"] == "node_inp_1"
+    assert c_inp["props"]["dom"]["placeholder"] == "Masukkan nama lengkap"
+    assert c_inp["props"]["dom"]["inputType"] == "text"
+
+    # Komponen tombol jauh tidak cocok (IoU < 0.3)
+    c_iso = matched[2]
+    assert "dom" not in c_iso["props"]
+    assert c_iso["label"] == "Tombol Terisolasi"
+
+    # 2. Satu node maksimal dipakai satu komponen
+    two_comp_same_box = [
+        {
+            "component_type": "button",
+            "label": "Tombol Pertama",
+            "props": {"box": {"x": 10.0, "y": 10.0, "w": 20.0, "h": 5.0}},
+        },
+        {
+            "component_type": "button",
+            "label": "Tombol Kedua",
+            "props": {"box": {"x": 10.0, "y": 10.0, "w": 20.0, "h": 5.0}},
+        },
+    ]
+    matched_two = _match_visual_nodes(two_comp_same_box, visual)
+    # Salah satu dapat node_btn_1, yang lain tidak
+    dom_count = sum(1 for c in matched_two if "dom" in c.get("props", {}))
+    assert dom_count == 1, "Satu visual node tidak boleh dipakai oleh dua komponen!"
+
+    # 3. Tanpa visual: hasil identik
+    unmodified = _match_visual_nodes(components, None)
+    assert unmodified == components
+    unmodified_empty = _match_visual_nodes(components, {})
+    assert unmodified_empty == components
+
+    # 4. Redaksi teks sensitif
+    leak_comp = [
+        {
+            "component_type": "input",
+            "label": "Input Rahasia",
+            "props": {"box": {"x": 10.0, "y": 40.0, "w": 20.0, "h": 5.0}},
+        }
+    ]
+    matched_leak = _match_visual_nodes(leak_comp, visual)
+    leak_dom = matched_leak[0]["props"]["dom"]
+    assert "eyJhbGciOiJIUzI1NiJ9" not in str(leak_dom)
+    assert "AIzaSyD" not in str(leak_dom)
+    assert "rahasia@secret.com" not in str(leak_dom)
+    assert "[DISEMASKAN]" in str(leak_dom)
+
+
+

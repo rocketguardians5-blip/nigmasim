@@ -460,30 +460,40 @@ def _redact_sensitive_text(value: Any) -> str:
     """Hapus credential yang mungkin muncul pada teks hasil Gemini atau error."""
     text = str(value or "")
     api_key = (settings.gemini_api_key or "").strip()
-    if api_key:
+    if api_key and api_key in text:
         text = text.replace(api_key, "[DISEMASKAN]")
-    text = re.sub(r"AIza[0-9A-Za-z_-]{20,}", "[DISEMASKAN]", text)
-    text = re.sub(
-        r"(?i)(x-goog-api-key\s*[=:]\s*)[^&\s,;]+",
-        r"\1[DISEMASKAN]",
-        text,
-    )
-    text = re.sub(
-        r"(?i)([?&](?:key|api_key)=)[^&\s]+",
-        r"\1[DISEMASKAN]",
-        text,
-    )
-    text = re.sub(
-        r"(?i)\bBearer\s+[0-9A-Za-z._~+/=-]{8,}",
-        "Bearer [DISEMASKAN]",
-        text,
-    )
-    text = re.sub(r"\bsk-[0-9A-Za-z_-]{16,}\b", "[DISEMASKAN]", text)
-    text = re.sub(
-        r"(?i)data:[^;\s]+;base64,[0-9A-Za-z+/=]+",
-        "[DATA BINARY DITARMAKAN]",
-        text,
-    )
+    if "AIza" in text:
+        text = re.sub(r"\bAIza[0-9A-Za-z_-]{16,}\b", "[DISEMASKAN]", text)
+    if "x-goog-api-key" in text.lower():
+        text = re.sub(
+            r"(?i)(x-goog-api-key\s*[=:]\s*)[^&\s,;]+",
+            r"\1[DISEMASKAN]",
+            text,
+        )
+    if "key=" in text.lower() or "api_key=" in text.lower():
+        text = re.sub(
+            r"(?i)([?&](?:key|api_key)=)[^&\s]+",
+            r"\1[DISEMASKAN]",
+            text,
+        )
+    if "bearer" in text.lower():
+        text = re.sub(
+            r"(?i)\bBearer\s+[0-9A-Za-z._~+/=-]{8,}",
+            "Bearer [DISEMASKAN]",
+            text,
+        )
+    if "sk-" in text:
+        text = re.sub(r"\bsk-[0-9A-Za-z_-]{16,}\b", "[DISEMASKAN]", text)
+    if "@" in text:
+        text = re.sub(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", "[EMAIL DISEMASKAN]", text)
+    if any(c.isdigit() for c in text):
+        text = re.sub(r"\b(?:\+?62|08)[0-9]{8,13}\b", "[NOMOR DISEMASKAN]", text)
+    if "data:" in text.lower() and "base64" in text.lower():
+        text = re.sub(
+            r"(?i)data:[^;\s]+;base64,[0-9A-Za-z+/=]+",
+            "[DATA BINARY DITARMAKAN]",
+            text,
+        )
     return text
 
 
@@ -588,6 +598,12 @@ def _sanitize_result_component(value: dict[str, Any]) -> dict[str, Any]:
             table_headers = _safe_table_headers(raw_props.get("headers"))
             if table_headers is not None:
                 props["headers"] = table_headers
+        if "dom" in raw_props and isinstance(raw_props["dom"], dict):
+            props["dom"] = _redact_layout_value(raw_props["dom"])
+        if "label_source" in raw_props:
+            props["label_source"] = str(raw_props["label_source"])
+        if "label_guess" in raw_props:
+            props["label_guess"] = _redact_sensitive_text(raw_props["label_guess"])
         if "box" in props:
             box = _sanitize_result_box(raw_props.get("box"))
             if box is None:
@@ -786,6 +802,159 @@ def _trim_ai_result_to_limit(result: dict[str, Any]) -> tuple[dict[str, Any], bo
     return trimmed, True
 
 
+def _is_compatible_type(comp_type: str, node: dict[str, Any]) -> bool:
+    """Periksa apakah tipe komponen draf cocok dengan tag/tipe node visual DOM."""
+    c_type = (comp_type or "").lower().strip()
+    tag = (node.get("tag") or "").lower().strip()
+    itype = (node.get("inputType") or "").lower().strip()
+    has_icon = bool(node.get("icon"))
+
+    if c_type in ("input", "field"):
+        return tag in ("input", "textarea", "select")
+    if c_type in ("button", "action"):
+        return tag in ("button", "a") or (tag == "input" and itype in ("submit", "button", "reset"))
+    if c_type in ("heading",):
+        return tag in ("h1", "h2", "h3", "h4", "h5", "h6") or (tag in ("p", "span", "div") and bool(node.get("text")))
+    if c_type in ("image", "icon", "logo"):
+        return tag in ("img", "svg") or has_icon
+    if c_type in ("link", "nav-item"):
+        return tag in ("a", "button", "span", "li")
+    if c_type in ("card", "container", "form"):
+        return tag in ("div", "section", "article", "form", "main", "aside")
+    if c_type in ("text",):
+        return bool(node.get("text"))
+    return True
+
+
+def _comp_box_to_pixels(b: dict[str, Any], vw: int, vh: int) -> dict[str, float]:
+    """Konversi box komponen ke piksel jika masih dalam persentase."""
+    try:
+        x = float(b.get("x", 0))
+        y = float(b.get("y", 0))
+        w = float(b.get("w", 0))
+        h = float(b.get("h", 0))
+    except (ValueError, TypeError):
+        return {"x": 0.0, "y": 0.0, "w": 0.0, "h": 0.0}
+
+    # Jika salah satu dimensi > 100, berarti sudah dalam koordinat piksel
+    if x > 100.0 or y > 100.0 or w > 100.0 or h > 100.0:
+        return {"x": x, "y": y, "w": w, "h": h}
+    return {
+        "x": x * vw / 100.0,
+        "y": y * vh / 100.0,
+        "w": w * vw / 100.0,
+        "h": h * vh / 100.0,
+    }
+
+
+def _apply_dom_node_to_component(comp: dict[str, Any], node: dict[str, Any]) -> None:
+    """Terapkan metadata DOM node ke komponen draf (props.dom, label asli)."""
+    props = comp.setdefault("props", {})
+    dom_props: dict[str, Any] = {}
+
+    if node.get("id") is not None:
+        dom_props["node_id"] = str(node["id"])
+    if node.get("text") is not None and str(node["text"]).strip():
+        dom_props["text"] = _redact_sensitive_text(node["text"])
+    if node.get("placeholder") is not None:
+        dom_props["placeholder"] = _redact_sensitive_text(node["placeholder"])
+    if node.get("inputType") is not None:
+        dom_props["inputType"] = str(node["inputType"])
+    if node.get("style"):
+        dom_props["style"] = _redact_layout_value(node["style"])
+    if node.get("icon"):
+        dom_props["icon"] = _redact_layout_value(node["icon"])
+
+    props["dom"] = dom_props
+
+    # Teks dari DOM menang atas label tebakan
+    dom_text = dom_props.get("text")
+    if dom_text and dom_text.strip():
+        comp_label = comp.get("label") or ""
+        if comp_label != dom_text:
+            props["label_source"] = "dom"
+            if comp_label:
+                props["label_guess"] = comp_label
+            comp["label"] = dom_text
+
+
+def _match_visual_nodes(
+    components: list[dict[str, Any]],
+    visual: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Cocokkan komponen draf dengan node pohon visual DOM terbaik.
+
+    Murni tanpa jaringan. Memakai node_id eksplisit (bila ada) atau IoU kotak >= 0.3
+    dengan syarat tipe kompatibel. Setiap node maksimal dipakai satu komponen.
+    """
+    if not visual or not isinstance(visual, dict) or not visual.get("nodes"):
+        return components
+
+    vw = int((visual.get("viewport") or {}).get("w") or 1440)
+    vh = int((visual.get("viewport") or {}).get("h") or 900)
+    nodes: list[dict[str, Any]] = [n for n in visual.get("nodes", []) if isinstance(n, dict)]
+
+    node_by_id: dict[str, dict[str, Any]] = {
+        str(n["id"]): n for n in nodes if n.get("id") is not None
+    }
+
+    matched_components = [copy.deepcopy(c) for c in components]
+    used_node_ids: set[str] = set()
+
+    # Fase 1: Pencocokan eksplisit via node_id (misal dari respon AI vision atau props dom lama)
+    for c in matched_components:
+        props = c.setdefault("props", {})
+        explicit_node_id = props.get("node_id") or c.get("node_id")
+        if not explicit_node_id and isinstance(props.get("dom"), dict):
+            explicit_node_id = props["dom"].get("node_id")
+
+        if explicit_node_id and str(explicit_node_id) in node_by_id:
+            nid = str(explicit_node_id)
+            if nid not in used_node_ids:
+                node = node_by_id[nid]
+                used_node_ids.add(nid)
+                _apply_dom_node_to_component(c, node)
+
+    # Fase 2: Pencocokan geometris IoU >= 0.3 untuk komponen yang belum punya props["dom"]
+    candidate_pairs: list[tuple[float, int, dict[str, Any]]] = []
+    for c_idx, c in enumerate(matched_components):
+        props = c.get("props") or {}
+        if props.get("dom"):
+            continue
+        c_box = props.get("box") or c.get("box")
+        if not c_box:
+            continue
+        c_px = _comp_box_to_pixels(c_box, vw, vh)
+        c_type = c.get("component_type") or "unknown"
+
+        for node in nodes:
+            nid = str(node.get("id", ""))
+            if not nid or nid in used_node_ids:
+                continue
+            if not _is_compatible_type(c_type, node):
+                continue
+            n_box = node.get("box")
+            if not n_box:
+                continue
+            iou = _component_box_iou(c_px, n_box)
+            if iou >= 0.3:
+                candidate_pairs.append((iou, c_idx, node))
+
+    # Urutkan berdasarkan IoU tertinggi
+    candidate_pairs.sort(key=lambda x: x[0], reverse=True)
+
+    matched_c_indices: set[int] = set()
+    for iou, c_idx, node in candidate_pairs:
+        nid = str(node.get("id", ""))
+        if c_idx in matched_c_indices or nid in used_node_ids:
+            continue
+        matched_c_indices.add(c_idx)
+        used_node_ids.add(nid)
+        _apply_dom_node_to_component(matched_components[c_idx], node)
+
+    return matched_components
+
+
 def store_analysis(
     db: Session,
     screen: Screen,
@@ -900,6 +1069,10 @@ def store_analysis(
         for c in reconstruction.components
         if c.region == "manual" or c.source == "manual"
     ]
+
+    screen_structure = screen.structure if isinstance(screen.structure, dict) else {}
+    if "visual" in screen_structure and isinstance(screen_structure["visual"], dict):
+        analysis.components = _match_visual_nodes(analysis.components, screen_structure["visual"])
 
     safe_analysis_components = [
         _sanitize_result_component(component)
@@ -1595,6 +1768,9 @@ Output HANYA JSON valid sesuai format di system prompt."""
         )
         merged = _merge_components(existing_analysis.components, ai_components, viewport)
         existing_analysis.components = merged
+        structure = screen.structure if isinstance(screen.structure, dict) else {}
+        if "visual" in structure:
+            existing_analysis.components = _match_visual_nodes(existing_analysis.components, structure["visual"])
 
         # Merge AI assumptions (avoid duplicates)
         raw_assumptions = safe_ai_result.get("assumptions", [])
@@ -2049,6 +2225,8 @@ def analyze_screen_with_ai(screen: Screen, elements: list[ScreenElement]) -> Ana
 
     # Komponen deterministik dari struktur semantik + elements
     result.components = _structure_to_components(structure, viewport, elements)
+    if isinstance(structure, dict) and "visual" in structure:
+        result.components = _match_visual_nodes(result.components, structure["visual"])
 
     # Asumsi dasar
     result.assumptions = [
