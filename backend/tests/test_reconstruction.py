@@ -1826,4 +1826,102 @@ def test_match_visual_nodes_commit1_unit():
     assert "[DISEMASKAN]" in str(leak_dom)
 
 
+def test_static_text_components_from_dom_commit2():
+    """Unit test untuk ekstraksi teks statis dari DOM (Commit 2)."""
+    from app.services.reconstructor import _match_visual_nodes
+
+    visual = {
+        "viewport": {"w": 1000, "h": 1000},
+        "nodes": [
+            # Node judul h1 (belum cocok)
+            {
+                "id": "node_h1",
+                "parent": "node_body",
+                "tag": "h1",
+                "box": {"x": 100, "y": 50, "w": 400, "h": 40},
+                "text": "Selamat Datang di Portal",
+            },
+            # Node subjudul p (belum cocok)
+            {
+                "id": "node_sub",
+                "parent": "node_body",
+                "tag": "p",
+                "box": {"x": 100, "y": 100, "w": 400, "h": 30},
+                "text": "Silakan login dengan kredensial Anda",
+            },
+            # Node button (akan cocok dengan komponen)
+            {
+                "id": "node_btn",
+                "parent": "node_body",
+                "tag": "button",
+                "box": {"x": 100, "y": 200, "w": 200, "h": 50},
+                "text": "Masuk",
+                "inputType": "submit",
+            },
+            # Child span di dalam button (turunan dari node_btn yang sudah cocok -> TIDAK boleh jadi komponen text terpisah!)
+            {
+                "id": "node_btn_span",
+                "parent": "node_btn",
+                "tag": "span",
+                "box": {"x": 120, "y": 210, "w": 80, "h": 20},
+                "text": "Masuk",
+            },
+            # Node footer (belum cocok)
+            {
+                "id": "node_foot",
+                "parent": "node_body",
+                "tag": "div",
+                "box": {"x": 100, "y": 900, "w": 800, "h": 30},
+                "text": "© 2026 Hak Cipta Dilindungi",
+            },
+        ],
+    }
+
+    components = [
+        {
+            "component_type": "button",
+            "label": "Tombol Masuk",
+            "props": {"box": {"x": 10.0, "y": 20.0, "w": 20.0, "h": 5.0}},
+        }
+    ]
+
+    result = _match_visual_nodes(components, visual)
+
+    # 1. Komponen button tetap cocok dengan node_btn
+    btn_comp = result[0]
+    assert btn_comp["component_type"] == "button"
+    assert btn_comp["props"]["dom"]["node_id"] == "node_btn"
+
+    # 2. Judul, subjudul, footer muncul sebagai komponen type="text" dan source="dom"
+    text_comps = [c for c in result if c.get("component_type") == "text"]
+    text_labels = [c["label"] for c in text_comps]
+
+    assert "Selamat Datang di Portal" in text_labels
+    assert "Silakan login dengan kredensial Anda" in text_labels
+    assert "© 2026 Hak Cipta Dilindungi" in text_labels
+
+    for tc in text_comps:
+        assert tc["source"] == "dom"
+        assert tc["props"]["dom"]["node_id"] in ["node_h1", "node_sub", "node_foot"]
+
+    # 3. Span anak button TIDAK boleh terduplikasi menjadi komponen terpisah
+    assert "node_btn_span" not in [tc["props"]["dom"]["node_id"] for tc in text_comps]
+
+    # 4. Batas maksimal 30 komponen tambahan
+    large_nodes = [
+        {
+            "id": f"node_extra_{i}",
+            "parent": None,
+            "tag": "p",
+            "box": {"x": 10, "y": 10 + i * 10, "w": 100, "h": 10},
+            "text": f"Teks Tambahan {i}",
+        }
+        for i in range(50)
+    ]
+    visual_large = {"viewport": {"w": 1000, "h": 1000}, "nodes": large_nodes}
+    result_large = _match_visual_nodes([], visual_large)
+    assert len(result_large) == 30, f"Batas 30 dilanggar, didapat: {len(result_large)}"
+
+
+
 

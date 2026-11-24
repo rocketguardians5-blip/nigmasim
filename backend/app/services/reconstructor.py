@@ -952,6 +952,88 @@ def _match_visual_nodes(
         used_node_ids.add(nid)
         _apply_dom_node_to_component(matched_components[c_idx], node)
 
+    # Fase 3: Tambahkan komponen teks statis dari node DOM non-interaktif
+    # yang belum cocok dan bukan turunan komponen yang sudah cocok (maksimal 30).
+    parent_map: dict[str, str | None] = {
+        str(n["id"]): str(n["parent"]) if n.get("parent") is not None else None
+        for n in nodes if n.get("id") is not None
+    }
+
+    def _is_descendant_of_used(nid: str) -> bool:
+        curr = parent_map.get(nid)
+        while curr:
+            if curr in used_node_ids:
+                return True
+            curr = parent_map.get(curr)
+        return False
+
+    interactive_tags = {"input", "textarea", "select", "button", "script", "style", "svg"}
+
+    added_text_count = 0
+    start_order = len(matched_components)
+    for node in nodes:
+        if added_text_count >= 30:
+            break
+        nid = str(node.get("id", ""))
+        if not nid or nid in used_node_ids:
+            continue
+        if _is_descendant_of_used(nid):
+            continue
+
+        tag = (node.get("tag") or "").lower().strip()
+        if tag in interactive_tags:
+            continue
+
+        raw_text = node.get("text")
+        if not raw_text or not str(raw_text).strip():
+            continue
+
+        clean_text = _redact_sensitive_text(str(raw_text).strip())
+        if not clean_text:
+            continue
+
+        n_box = node.get("box") or {}
+        px_w = float(n_box.get("w", 0))
+        px_h = float(n_box.get("h", 0))
+        if px_w <= 0 or px_h <= 0:
+            continue
+
+        pct_box = {
+            "x": round(float(n_box.get("x", 0)) / vw * 100, 1),
+            "y": round(float(n_box.get("y", 0)) / vh * 100, 1),
+            "w": round(px_w / vw * 100, 1),
+            "h": round(px_h / vh * 100, 1),
+        }
+
+        region = "main"
+        if pct_box["x"] < 20 and pct_box["w"] < 25:
+            region = "sidebar"
+        elif pct_box["y"] < 12:
+            region = "header"
+
+        dom_props: dict[str, Any] = {"node_id": nid, "text": clean_text}
+        if node.get("style"):
+            dom_props["style"] = _redact_layout_value(node["style"])
+        if node.get("icon"):
+            dom_props["icon"] = _redact_layout_value(node["icon"])
+
+        text_comp = {
+            "region": region,
+            "component_type": "text",
+            "label": clean_text,
+            "source": "dom",
+            "order_index": start_order + added_text_count,
+            "props": {
+                "box": pct_box,
+                "dom": dom_props,
+                "label_source": "dom",
+            },
+        }
+
+        matched_components.append(text_comp)
+        used_node_ids.add(nid)
+        added_text_count += 1
+
     return matched_components
 
 
