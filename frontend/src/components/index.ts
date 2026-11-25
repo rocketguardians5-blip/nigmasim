@@ -3,3 +3,4 @@
 export * from './ui'
 export * from './icons'
 export * from './StatusBadge'
+export * from './AIReconstructionPreview'

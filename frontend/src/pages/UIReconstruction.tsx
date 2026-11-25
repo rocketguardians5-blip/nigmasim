@@ -15,10 +15,12 @@ import {
   Field,
   PageHeader,
   Spinner,
+  cn,
 } from '../components/ui'
 import { IconWarning, IconInfo, IconMagic } from '../components/icons'
 import { HotspotEditor, type HotspotBox } from '../components/HotspotEditor'
 import { AIResultPanel } from '../components/AIResultPanel'
+import { AIReconstructionPreview } from '../components/AIReconstructionPreview'
 
 const CONFIDENCE_TONE: Record<string, 'neutral' | 'success' | 'warning' | 'danger'> = {
   high: 'success',
@@ -105,6 +107,7 @@ export function UIReconstructionPage() {
   // Hotspot editor state
   const [hotspots, setHotspots] = useState<HotspotBox[]>([])
   const [isEditorOpen, setIsEditorOpen] = useState(false)
+  const [rightPanelTab, setRightPanelTab] = useState<'preview' | 'editor'>('preview')
 
   const loadDraft = useCallback(async (id: number): Promise<Reconstruction | null> => {
     try {
@@ -632,14 +635,20 @@ export function UIReconstructionPage() {
           )}
 
           {/* Perbandingan: asli vs Draf struktur (editor kotak) */}
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <Card title="Tampilan asli" description="Screenshot hasil capture (versi termasking).">
+          <div className="mt-4 grid gap-4 lg:grid-cols-2 items-start">
+            <Card
+              title="Tampilan asli"
+              description="Screenshot hasil capture (versi termasking)."
+              className="flex flex-col h-full"
+            >
               {screenshot ? (
-                <img
-                  src={screenshot}
-                  alt="Tampilan asli"
-                  className="w-full rounded border border-slate-200"
-                />
+                <div className="overflow-auto max-h-[750px] rounded-lg border border-slate-200 bg-slate-900/5">
+                  <img
+                    src={screenshot}
+                    alt="Tampilan asli"
+                    className="w-full h-auto block rounded"
+                  />
+                </div>
               ) : (
                 <div className="grid aspect-[16/10] place-items-center text-xs text-slate-400">
                   Screenshot tidak tersedia
@@ -648,22 +657,70 @@ export function UIReconstructionPage() {
             </Card>
 
             <Card
-              title="Draf struktur (Editor Kotak)"
-              description="Screenshot dengan overlay kotak komponen. Drag/resize kotak, klik kanan untuk menu, B untuk gambar kotak manual."
+              title="Draf struktur"
+              description={
+                rightPanelTab === 'preview'
+                  ? 'Preview visual hasil rekonstruksi AI Vision dan struktur draf aktif.'
+                  : 'Screenshot dengan overlay kotak komponen. Buka editor layar penuh untuk mengedit hotspot.'
+              }
+              actions={
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs font-medium text-slate-600">
+                    <button
+                      type="button"
+                      onClick={() => setRightPanelTab('preview')}
+                      className={cn(
+                        'rounded-md px-3 py-1 transition-all',
+                        rightPanelTab === 'preview'
+                          ? 'bg-white text-slate-900 shadow-sm font-semibold'
+                          : 'text-slate-600 hover:text-slate-900',
+                      )}
+                    >
+                      Preview Hasil AI
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRightPanelTab('editor')}
+                      className={cn(
+                        'rounded-md px-3 py-1 transition-all',
+                        rightPanelTab === 'editor'
+                          ? 'bg-white text-slate-900 shadow-sm font-semibold'
+                          : 'text-slate-600 hover:text-slate-900',
+                      )}
+                    >
+                      Editor Kotak
+                    </button>
+                  </div>
+                  {screenshot && (
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() => setIsEditorOpen(true)}
+                      disabled={!canWrite}
+                      title={canWrite ? undefined : 'Anda tidak memiliki izin screens:write'}
+                    >
+                      Buka Editor Layar Penuh
+                    </Button>
+                  )}
+                </div>
+              }
+              className="flex flex-col h-full"
             >
-              {screenshot ? (
+              {rightPanelTab === 'preview' ? (
+                <AIReconstructionPreview draft={draft} />
+              ) : screenshot ? (
                 <>
                   {!isEditorOpen ? (
-                    <div className="grid aspect-[16/10] place-items-center gap-4 p-8 border-2 border-dashed border-white/20 rounded-xl">
+                    <div className="grid aspect-[16/10] place-items-center gap-4 p-8 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50">
                       <div className="text-center">
-                        <p className="text-lg font-medium text-slate-300">Editor Kotak Hotspot</p>
+                        <p className="text-lg font-medium text-slate-700">Editor Kotak Hotspot</p>
                         <p className="text-sm text-slate-500 mt-1">
-                          Klik tombol di bawah untuk membuka editor mode layar penuh
+                          Klik tombol di bawah atau di header untuk membuka editor mode layar penuh
                         </p>
                         <img
                           src={screenshot}
                           alt="Preview screenshot"
-                          className="mt-4 max-h-48 mx-auto rounded border border-white/10 shadow-lg"
+                          className="mt-4 max-h-48 mx-auto rounded border border-slate-200 shadow-sm"
                         />
                       </div>
                     </div>
@@ -681,18 +738,6 @@ export function UIReconstructionPage() {
                       </button>
                     )}
                   </div>
-                  {isEditorOpen && (
-                    <HotspotEditor
-                      screenId={screenId ?? undefined}
-                      screenshot={screenshot}
-                      boxes={hotspots}
-                      saving={false}
-                      onChange={handleHotspotsChange}
-                      onDeleteBoxes={(ids) => void handleDeleteBoxes(ids)}
-                      onClose={() => setIsEditorOpen(false)}
-                      onSaveManual={undefined}
-                    />
-                  )}
                 </>
               ) : (
                 <div className="grid aspect-[16/10] place-items-center text-xs text-slate-400">
@@ -701,6 +746,20 @@ export function UIReconstructionPage() {
               )}
             </Card>
           </div>
+
+          {/* Editor Kotak Layar Penuh Modal */}
+          {isEditorOpen && screenshot && (
+            <HotspotEditor
+              screenId={screenId ?? undefined}
+              screenshot={screenshot}
+              boxes={hotspots}
+              saving={false}
+              onChange={handleHotspotsChange}
+              onDeleteBoxes={(ids) => void handleDeleteBoxes(ids)}
+              onClose={() => setIsEditorOpen(false)}
+              onSaveManual={undefined}
+            />
+          )}
 
           {/* Komponen tanpa posisi */}
           {getComponentsWithoutPosition(draft).length > 0 && (

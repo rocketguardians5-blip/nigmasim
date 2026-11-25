@@ -94,6 +94,38 @@ export interface ReconstructionSection {
   items: Array<{ type: string; label?: string | null }>
 }
 
+export interface ReconstructionTheme {
+  page?: {
+    backgroundColor?: string
+    fontFamily?: string
+  }
+  primary?: {
+    backgroundColor?: string
+    color?: string
+    borderRadius?: string
+    fontWeight?: string
+  }
+  text?: {
+    heading?: {
+      color?: string
+      fontSize?: string
+      fontWeight?: string
+    }
+    body?: {
+      color?: string
+      fontSize?: string
+      fontWeight?: string
+    }
+  }
+  card?: {
+    box?: { x: number; y: number; w: number; h: number }
+    backgroundColor?: string
+    borderColor?: string
+    borderRadius?: string
+    boxShadow?: string
+  }
+}
+
 export interface Reconstruction {
   id: number
   screen_id: number
@@ -119,6 +151,7 @@ export interface Reconstruction {
     ai_result?: AIResult | null
     ai_result_truncated?: boolean
     ai_result_size_bytes?: number
+    theme?: ReconstructionTheme | null
   } | null
   code_text: string | null
   generated_by: string
