@@ -538,104 +538,94 @@ export function UIReconstructionPage() {
         </div>
       </Card>
 
-      {screenId && !draft && (
-        <div className="space-y-6">
-          <EmptyState title="Belum ada draf" description="Klik 'Analisis & buat draf' untuk memulai." />
-          <AIResultPanel
-            draft={draft}
-            analyzing={analyzing}
-            canRunAI={canWrite}
-            onRunAI={() => void handleAIAnalyze()}
-          />
-        </div>
-      )}
-
-      {draft && (
+      {screenId && (
         <div className="space-y-6">
           {/* Ringkasan draf */}
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <Badge tone={draft.status === 'approved' ? 'success' : draft.status === 'rejected' ? 'danger' : 'warning'}>
-              Status: {draft.status}
-            </Badge>
-            <Badge tone="neutral">{draft.components.length} komponen</Badge>
-            <Badge tone={unresolved > 0 ? 'danger' : 'success'}>
-              {unresolved > 0 ? `${unresolved} asumsi belum dicek` : 'Semua asumsi sudah dicek'}
-            </Badge>
-            {/* Generator Usability Warning */}
-            {usability && usability.usable_count === 0 && (
-              <Badge tone="warning">
-                <span className="flex items-center gap-1">
-                  <IconWarning size={10} />
-                  Usable AI/manual: {usability.valid_components} komponen
-                </span>
+          {draft && (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Badge tone={draft.status === 'approved' ? 'success' : draft.status === 'rejected' ? 'danger' : 'warning'}>
+                Status: {draft.status}
               </Badge>
-            )}
-            {usability && usability.usable_count > 0 && (
-              <Badge tone="success">
-                <span className="flex items-center gap-1">
-                  <IconInfo size={10} />
-                  AI/manual usable: {usability.usable_count} elemen
-                </span>
+              <Badge tone="neutral">{draft.components.length} komponen</Badge>
+              <Badge tone={unresolved > 0 ? 'danger' : 'success'}>
+                {unresolved > 0 ? `${unresolved} asumsi belum dicek` : 'Semua asumsi sudah dicek'}
               </Badge>
-            )}
-            <span className="text-xs text-slate-500">
-              dibuat oleh {draft.generated_by} · {new Date(draft.created_at).toLocaleString('id-ID')}
-            </span>
-            
-            {/* AI Status & Model Badge */}
-            {draft.layout?.ai_status && (
-              <>
-                {draft.layout.ai_status === 'success' && (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge tone="success">
-                      <span className="flex items-center gap-1">
-                        <IconInfo size={10} /> AI Vision aktif
-                      </span>
-                    </Badge>
-                    <Badge tone="neutral">
-                      {draft.layout.ai_model || 'Gemini'}
-                    </Badge>
-                    {draft.layout.ai_source === 'fallback' && (
-                      <Badge tone="warning">
+              {/* Generator Usability Warning */}
+              {usability && usability.usable_count === 0 && (
+                <Badge tone="warning">
+                  <span className="flex items-center gap-1">
+                    <IconWarning size={10} />
+                    Usable AI/manual: {usability.valid_components} komponen
+                  </span>
+                </Badge>
+              )}
+              {usability && usability.usable_count > 0 && (
+                <Badge tone="success">
+                  <span className="flex items-center gap-1">
+                    <IconInfo size={10} />
+                    AI/manual usable: {usability.usable_count} elemen
+                  </span>
+                </Badge>
+              )}
+              <span className="text-xs text-slate-500">
+                dibuat oleh {draft.generated_by} · {new Date(draft.created_at).toLocaleString('id-ID')}
+              </span>
+              
+              {/* AI Status & Model Badge */}
+              {draft.layout?.ai_status && (
+                <>
+                  {draft.layout.ai_status === 'success' && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge tone="success">
                         <span className="flex items-center gap-1">
-                          <IconWarning size={10} /> Dianalisis dengan model cadangan
+                          <IconInfo size={10} /> AI Vision aktif
                         </span>
                       </Badge>
-                    )}
-                  </div>
-                )}
-                {draft.layout.ai_status === 'failed' && (
-                  <Badge tone="danger">
-                    <span className="flex items-center gap-1">
-                      <IconWarning size={10} /> AI gagal: {draft.layout.ai_error || 'Unknown error'}
-                    </span>
-                  </Badge>
-                )}
-                {draft.layout.ai_status === 'not_configured' && (
-                  <Badge tone="warning">
-                    <span className="flex items-center gap-1">
-                      <IconWarning size={10} /> AI belum aktif: {draft.layout.ai_error || 'GEMINI_API_KEY tidak dikonfigurasi'}
-                    </span>
-                  </Badge>
-                )}
-              </>
-            )}
-            
-            {canReview && (
-              <div className="ml-auto flex gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => void handleReview('in_review')}
-                >
-                  Minta review
-                </Button>
-                <Button size="sm" onClick={() => void handleReview('approved')}>
-                  Setujui draf
-                </Button>
-              </div>
-            )}
-          </div>
+                      <Badge tone="neutral">
+                        {draft.layout.ai_model || 'Gemini'}
+                      </Badge>
+                      {draft.layout.ai_source === 'fallback' && (
+                        <Badge tone="warning">
+                          <span className="flex items-center gap-1">
+                            <IconWarning size={10} /> Dianalisis dengan model cadangan
+                          </span>
+                        </Badge>
+                      )}
+                    </div>
+                  )}
+                  {draft.layout.ai_status === 'failed' && (
+                    <Badge tone="danger">
+                      <span className="flex items-center gap-1">
+                        <IconWarning size={10} /> AI gagal: {draft.layout.ai_error || 'Unknown error'}
+                      </span>
+                    </Badge>
+                  )}
+                  {draft.layout.ai_status === 'not_configured' && (
+                    <Badge tone="warning">
+                      <span className="flex items-center gap-1">
+                        <IconWarning size={10} /> AI belum aktif: {draft.layout.ai_error || 'GEMINI_API_KEY tidak dikonfigurasi'}
+                      </span>
+                    </Badge>
+                  )}
+                </>
+              )}
+              
+              {canReview && (
+                <div className="ml-auto flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void handleReview('in_review')}
+                  >
+                    Minta review
+                  </Button>
+                  <Button size="sm" onClick={() => void handleReview('approved')}>
+                    Setujui draf
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
 
           <AIResultPanel
             draft={draft}
@@ -691,7 +681,13 @@ export function UIReconstructionPage() {
                   <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs font-medium text-slate-600">
                     <button
                       type="button"
-                      onClick={() => setRightPanelTab('preview')}
+                      role="tab"
+                      aria-selected={rightPanelTab === 'preview'}
+                      data-testid="tab-preview-ai"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        setRightPanelTab('preview')
+                      }}
                       className={cn(
                         'rounded-md px-3 py-1 transition-all',
                         rightPanelTab === 'preview'
@@ -703,7 +699,13 @@ export function UIReconstructionPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setRightPanelTab('editor')}
+                      role="tab"
+                      aria-selected={rightPanelTab === 'editor'}
+                      data-testid="tab-editor-kotak"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        setRightPanelTab('editor')
+                      }}
                       className={cn(
                         'rounded-md px-3 py-1 transition-all',
                         rightPanelTab === 'editor'
@@ -786,92 +788,96 @@ export function UIReconstructionPage() {
             />
           )}
 
-          {/* Komponen tanpa posisi */}
-          {getComponentsWithoutPosition(draft).length > 0 && (
-            <Card title="Komponen belum memiliki posisi" className="mt-4">
-              <p className="text-sm text-slate-600 mb-2">
-                {getComponentsWithoutPosition(draft).length} komponen tidak memiliki koordinat (x, y). 
-                Gunakan editor di atas untuk menempatkan kotak, atau klik kanan pada area kosong untuk menambah kotak manual.
-              </p>
-              <ul className="space-y-1 max-h-40 overflow-y-auto">
-                {getComponentsWithoutPosition(draft).map((component) => (
-                  <li key={component.id} className="text-xs text-slate-700 flex items-center gap-2">
-                    <Badge tone="neutral">{component.component_type}</Badge>
-                    <span>{component.label || '(tanpa label)'}</span>
-                    <span className="text-slate-400">(source: {component.source})</span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
+          {draft && (
+            <>
+              {/* Komponen tanpa posisi */}
+              {getComponentsWithoutPosition(draft).length > 0 && (
+                <Card title="Komponen belum memiliki posisi" className="mt-4">
+                  <p className="text-sm text-slate-600 mb-2">
+                    {getComponentsWithoutPosition(draft).length} komponen tidak memiliki koordinat (x, y). 
+                    Gunakan editor di atas untuk menempatkan kotak, atau klik kanan pada area kosong untuk menambah kotak manual.
+                  </p>
+                  <ul className="space-y-1 max-h-40 overflow-y-auto">
+                    {getComponentsWithoutPosition(draft).map((component) => (
+                      <li key={component.id} className="text-xs text-slate-700 flex items-center gap-2">
+                        <Badge tone="neutral">{component.component_type}</Badge>
+                        <span>{component.label || '(tanpa label)'}</span>
+                        <span className="text-slate-400">(source: {component.source})</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              )}
 
-          {/* Asumsi */}
-          {draft.assumptions && draft.assumptions.length > 0 && (
-            <Card title="Asumsi (wajib dicek manusia)">
-              <ul className="space-y-2">
-                {draft.assumptions.map((a) => (
-                  <li key={a.id} className="flex items-start gap-3 p-3 rounded border border-slate-200 bg-slate-50">
-                    <Badge tone={CONFIDENCE_TONE[a.confidence]}>{a.confidence}</Badge>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-slate-800">{a.topic}</p>
-                      <p className="text-sm text-slate-600">{a.description}</p>
-                    </div>
-                    {a.resolved ? (
-                      <Badge tone="success">Sudah dicek</Badge>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline-primary"
-                        disabled={!canWrite}
-                        onClick={() => void reconstructionApi.resolve(a.id).then(() => void loadDraft(screenId!))}
-                      >
-                        Tandai dicek
-                      </Button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
+              {/* Asumsi */}
+              {draft.assumptions && draft.assumptions.length > 0 && (
+                <Card title="Asumsi (wajib dicek manusia)">
+                  <ul className="space-y-2">
+                    {draft.assumptions.map((a) => (
+                      <li key={a.id} className="flex items-start gap-3 p-3 rounded border border-slate-200 bg-slate-50">
+                        <Badge tone={CONFIDENCE_TONE[a.confidence]}>{a.confidence}</Badge>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-slate-800">{a.topic}</p>
+                          <p className="text-sm text-slate-600">{a.description}</p>
+                        </div>
+                        {a.resolved ? (
+                          <Badge tone="success">Sudah dicek</Badge>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline-primary"
+                            disabled={!canWrite}
+                            onClick={() => void reconstructionApi.resolve(a.id).then(() => void loadDraft(screenId!))}
+                          >
+                            Tandai dicek
+                          </Button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              )}
 
-          {/* Kode React */}
-          <Card title="Kode React (draf)" description="Hasil generasi — bisa diedit manual.">
-            <div className="relative">
-              <textarea
-                className="w-full h-[400px] font-mono text-sm p-3 border border-slate-300 rounded bg-slate-50 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                value={code}
-                readOnly={!canWrite}
-                onChange={(e) => setCode(e.target.value)}
-                spellCheck={false}
-              />
-              <div className="absolute top-2 right-2 flex gap-1">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => navigator.clipboard.writeText(code)}
-                >
-                  Salin
-                </Button>
-                <Button
-                  size="sm"
-                  disabled={!canWrite || code === draft.code_text}
-                  title={canWrite ? undefined : 'Anda tidak memiliki izin screens:write'}
-                  onClick={async () => {
-                    try {
-                      await reconstructionApi.updateCode(draft.screen_id, code)
-                      const updated = await reconstructionApi.get(screenId!)
-                      setDraft(updated)
-                      setNotice('Kode disimpan')
-                    } catch (err) {
-                      setError(err instanceof ApiError ? err.message : 'Gagal simpan kode')
-                    }
-                  }}
-                >
-                  Simpan
-                </Button>
-              </div>
-            </div>
-          </Card>
+              {/* Kode React */}
+              <Card title="Kode React (draf)" description="Hasil generasi — bisa diedit manual.">
+                <div className="relative">
+                  <textarea
+                    className="w-full h-[400px] font-mono text-sm p-3 border border-slate-300 rounded bg-slate-50 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    value={code}
+                    readOnly={!canWrite}
+                    onChange={(e) => setCode(e.target.value)}
+                    spellCheck={false}
+                  />
+                  <div className="absolute top-2 right-2 flex gap-1">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => navigator.clipboard.writeText(code)}
+                    >
+                      Salin
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={!canWrite || code === draft.code_text}
+                      title={canWrite ? undefined : 'Anda tidak memiliki izin screens:write'}
+                      onClick={async () => {
+                        try {
+                          await reconstructionApi.updateCode(draft.screen_id, code)
+                          const updated = await reconstructionApi.get(screenId!)
+                          setDraft(updated)
+                          setNotice('Kode disimpan')
+                        } catch (err) {
+                          setError(err instanceof ApiError ? err.message : 'Gagal simpan kode')
+                        }
+                      }}
+                    >
+                      Simpan
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </>
+          )}
         </div>
       )}
 
