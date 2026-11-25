@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { applicationsApi, projectsApi, ApiError } from '../lib/api'
 import type { Application, Project } from '../lib/api'
 import { screensApi } from '../lib/capture'
@@ -108,10 +108,12 @@ export function UIReconstructionPage() {
   const [hotspots, setHotspots] = useState<HotspotBox[]>([])
   const [isEditorOpen, setIsEditorOpen] = useState(false)
   const [rightPanelTab, setRightPanelTab] = useState<'preview' | 'editor'>('preview')
+  const activeScreenIdRef = useRef<number | null>(null)
 
   const loadDraft = useCallback(async (id: number): Promise<Reconstruction | null> => {
     try {
       const result = await reconstructionApi.get(id)
+      if (activeScreenIdRef.current !== id) return null
       setDraft(result)
       setCode(result.code_text ?? '')
       
@@ -122,12 +124,17 @@ export function UIReconstructionPage() {
       // Check usability for generator
       try {
         const usabilityResult = await reconstructionApi.checkUsability(id)
-        setUsability(usabilityResult)
+        if (activeScreenIdRef.current === id) {
+          setUsability(usabilityResult)
+        }
       } catch {
-        setUsability(null)
+        if (activeScreenIdRef.current === id) {
+          setUsability(null)
+        }
       }
       return result
     } catch (err) {
+      if (activeScreenIdRef.current !== id) return null
       if (err instanceof ApiError && err.status === 404) {
         setDraft(null)
         setCode('')
@@ -311,25 +318,32 @@ export function UIReconstructionPage() {
   }, [loadScreens])
 
   useEffect(() => {
+    activeScreenIdRef.current = screenId
+    setDraft(null)
+    setCode('')
+    setScreenshot(null)
+    setHotspots([])
+    setUsability(null)
+
     if (screenId) {
       void loadDraft(screenId)
-    } else {
-      setDraft(null)
-      setCode('')
-      setScreenshot(null)
-      setHotspots([])
     }
   }, [screenId, loadDraft])
 
   // Load screenshot when screen changes
   useEffect(() => {
     if (!screenId) return
+    const targetId = screenId
     void (async () => {
       try {
-        const url = await screensApi.screenshotUrl(screenId, true)
-        setScreenshot(url)
+        const url = await screensApi.screenshotUrl(targetId, true)
+        if (activeScreenIdRef.current === targetId) {
+          setScreenshot(url)
+        }
       } catch {
-        setScreenshot(null)
+        if (activeScreenIdRef.current === targetId) {
+          setScreenshot(null)
+        }
       }
     })()
   }, [screenId])
@@ -481,7 +495,16 @@ export function UIReconstructionPage() {
             <select
               className="input min-w-[220px]"
               value={screenId ?? ''}
-              onChange={(e) => setScreenId(Number(e.target.value) || null)}
+              onChange={(e) => {
+                const nextId = Number(e.target.value) || null
+                activeScreenIdRef.current = nextId
+                setScreenId(nextId)
+                setDraft(null)
+                setHotspots([])
+                setScreenshot(null)
+                setCode('')
+                setUsability(null)
+              }}
             >
               <option value="">— pilih —</option>
               {screens.map((s) => (
@@ -750,9 +773,11 @@ export function UIReconstructionPage() {
           {/* Editor Kotak Layar Penuh Modal */}
           {isEditorOpen && screenshot && (
             <HotspotEditor
+              key={`hotspot-editor-${screenId}`}
               screenId={screenId ?? undefined}
               screenshot={screenshot}
               boxes={hotspots}
+              draft={draft}
               saving={false}
               onChange={handleHotspotsChange}
               onDeleteBoxes={(ids) => void handleDeleteBoxes(ids)}

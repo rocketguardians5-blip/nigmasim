@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { cn } from './ui'
+import { AIReconstructionPreview } from './AIReconstructionPreview'
+import type { Reconstruction, ReconstructionComponent } from '../lib/reconstruction'
 
 /*
  * Editor hotspot untuk screenshot "Tampilan asli".
@@ -623,11 +625,12 @@ interface HistoryEntry {
   selected: string[]
 }
 
-interface HotspotEditorProps {
+export interface HotspotEditorProps {
   screenId?: number
   screenshot: string
   boxes: HotspotBox[]
   saving: boolean
+  draft?: Reconstruction | null
   onChange: (boxes: HotspotBox[]) => void
   onDeleteBoxes?: (ids: string[]) => void | Promise<void>
   onClose: () => void
@@ -711,6 +714,7 @@ export function HotspotEditor({
   screenshot,
   boxes: initialBoxes,
   saving,
+  draft,
   onChange,
   onDeleteBoxes,
   onClose,
@@ -721,7 +725,8 @@ export function HotspotEditor({
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const selectedRef = useRef<string[]>([])
   const [tool, setTool] = useState<Tool>('select')
-  const [preview, setPreview] = useState(false)
+  const [viewMode, setViewMode] = useState<'canvas' | 'split' | 'preview'>('canvas')
+  const [testMode, setTestMode] = useState(false)
   const [showManual, setShowManual] = useState(true)
   const [showAuto, setShowAuto] = useState(true)
   const [hideTiny, setHideTiny] = useState(false)
@@ -741,6 +746,141 @@ export function HotspotEditor({
   const [spaceDown, setSpaceDown] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [dragKind, setDragKind] = useState<DragState['kind'] | null>(null)
+
+  // Sinkronisasi state internal saat screenId atau initialBoxes berubah
+  const prevScreenIdRef = useRef(screenId)
+  useEffect(() => {
+    if (screenId !== prevScreenIdRef.current) {
+      prevScreenIdRef.current = screenId
+      const normalized = initialBoxes.map(normalizeBox)
+      setBoxes(normalized)
+      boxesRef.current = normalized
+      setSelectedIds([])
+      selectedRef.current = []
+      historyRef.current = [{ boxes: normalized, selected: [] }]
+      historyIndexRef.current = 0
+      setHistoryTick((t) => t + 1)
+    }
+  }, [screenId, initialBoxes])
+
+  useEffect(() => {
+    const normalized = initialBoxes.map(normalizeBox)
+    setBoxes(normalized)
+    boxesRef.current = normalized
+  }, [initialBoxes])
+
+  // Draf live yang sinkron dengan perubahan kotak di kanvas secara real-time
+  const liveDraft = useMemo((): Reconstruction | null => {
+    if (!draft && boxes.length === 0) return null
+
+    const activeCompIds = new Set<number>()
+    const boxMap = new Map<number, HotspotBox>()
+    const manualBoxes: HotspotBox[] = []
+
+    for (const b of boxes) {
+      if (b.id.startsWith('comp-')) {
+        const compId = Number(b.id.replace('comp-', ''))
+        if (Number.isFinite(compId)) {
+          activeCompIds.add(compId)
+          boxMap.set(compId, b)
+          continue
+        }
+      }
+      manualBoxes.push(b)
+    }
+
+    const baseComponents = (draft?.components ?? []).filter((c) => activeCompIds.has(c.id))
+
+    const updatedComponents: ReconstructionComponent[] = baseComponents.map((c) => {
+      const b = boxMap.get(c.id)
+      if (!b) return c
+      const props = c.props || {}
+      const dom = (props.dom as Record<string, any>) || {}
+      return {
+        ...c,
+        label: b.label || c.label,
+        component_type: b.component_type || c.component_type,
+        element_type: b.element_type || c.element_type,
+        config_json: b.config_json !== undefined ? b.config_json : c.config_json,
+        source: b.source || c.source,
+        props: {
+          ...props,
+          box: { x: b.x, y: b.y, w: b.w, h: b.h },
+          action: b.action,
+          dom: {
+            ...dom,
+            text: b.label || dom.text,
+          },
+        },
+      }
+    })
+
+    manualBoxes.forEach((b, idx) => {
+      updatedComponents.push({
+        id: 900000 + idx,
+        region:
+          b.component_type === 'nav-item'
+            ? 'sidebar'
+            : b.component_type === 'header-item'
+              ? 'header'
+              : 'main',
+        component_type: b.component_type || 'button',
+        label: b.label,
+        props: {
+          box: { x: b.x, y: b.y, w: b.w, h: b.h },
+          action: b.action,
+          dom: { text: b.label },
+        },
+        order_index: 900 + idx,
+        source: 'manual',
+        element_type: b.element_type || 'button',
+        config_json: b.config_json || null,
+        notes: null,
+      })
+    })
+
+    const hasNav = boxes.some((b) => b.component_type === 'nav-item' || b.id.includes('nav'))
+    const hasHeaderItem = boxes.some((b) => b.component_type === 'header-item' || b.id.includes('header'))
+
+    if (!draft) {
+      return {
+        id: 0,
+        screen_id: screenId || 0,
+        project_id: 0,
+        status: 'draft',
+        layout: {
+          theme: null,
+          regions: {
+            sidebar: hasNav ? { x: 0, y: 0, w: 240, h: 900 } : null,
+            header: hasHeaderItem ? { x: 0, y: 0, w: 1440, h: 60 } : null,
+            main: { x: 0, y: 0, w: 1440, h: 900 },
+          },
+          has_sidebar: hasNav,
+          has_header: hasHeaderItem,
+          ai_status: 'not_configured',
+          ai_source: 'rule-engine',
+        },
+        code_text: null,
+        generated_by: 'manual',
+        reviewed_by: null,
+        reviewed_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        components: updatedComponents,
+        assumptions: [],
+      }
+    }
+
+    return {
+      ...draft,
+      components: updatedComponents,
+      layout: {
+        ...draft.layout,
+        has_sidebar: draft.layout?.has_sidebar || hasNav,
+        has_header: draft.layout?.has_header || hasHeaderItem,
+      },
+    }
+  }, [draft, boxes, screenId])
   const [listTab, setListTab] = useState<HotspotLayer>('manual')
   const [showAdvancedJson, setShowAdvancedJson] = useState(false)
 
@@ -1110,7 +1250,7 @@ export function HotspotEditor({
       startPan(event, 0)
       return
     }
-    if (preview) return
+    if (testMode) return
 
     if (tool === 'draw') {
       try {
@@ -1138,7 +1278,7 @@ export function HotspotEditor({
   }
 
   const startMove = (event: React.PointerEvent, box: HotspotBox) => {
-    if (event.button !== 0 || preview) return
+    if (event.button !== 0 || testMode) return
     event.stopPropagation()
 
     // Blur input aktif agar shortcut tombol Delete/keyboard langsung berfungsi
@@ -1195,7 +1335,7 @@ export function HotspotEditor({
   }
 
   const startResize = (event: React.PointerEvent, box: HotspotBox, dir: ResizeDir) => {
-    if (event.button !== 0 || preview) return
+    if (event.button !== 0 || testMode) return
     event.stopPropagation()
 
     if (document.activeElement instanceof HTMLElement && document.activeElement !== event.currentTarget) {
@@ -1796,7 +1936,7 @@ export function HotspotEditor({
     window.open(action, '_blank', 'noopener,noreferrer')
   }
 
-  const stageCursor = preview
+  const stageCursor = testMode
     ? 'default'
     : dragKind === 'pan' || spaceDown
       ? 'grabbing'
@@ -1908,7 +2048,7 @@ export function HotspotEditor({
         <button
           type="button"
           onClick={() => deleteBoxes(selectedIds)}
-          disabled={!selectedIds.length || preview}
+          disabled={!selectedIds.length || testMode}
           title="Hapus kotak terpilih (Delete)"
           aria-label="Hapus kotak terpilih"
           className="h-8 rounded border border-rose-400/40 bg-rose-500/15 px-2.5 text-xs text-rose-200 hover:bg-rose-500/30 disabled:opacity-30"
@@ -2011,21 +2151,67 @@ export function HotspotEditor({
 
         <div className="mx-1 h-6 w-px bg-white/10" />
 
+        {/* Switcher Tampilan: Kanvas, Split, Preview */}
+        <div className="flex overflow-hidden rounded border border-white/15 bg-white/5 text-xs">
+          <button
+            type="button"
+            onClick={() => setViewMode('canvas')}
+            className={cn(
+              'h-8 px-2.5 font-medium transition-colors',
+              viewMode === 'canvas'
+                ? 'bg-[#4268ff] text-white'
+                : 'text-slate-300 hover:bg-white/10 hover:text-white',
+            )}
+            title="Tampilkan kanvas screenshot saja"
+          >
+            Kanvas
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('split')}
+            className={cn(
+              'h-8 px-2.5 font-medium transition-colors border-l border-white/10',
+              viewMode === 'split'
+                ? 'bg-[#4268ff] text-white'
+                : 'text-slate-300 hover:bg-white/10 hover:text-white',
+            )}
+            title="Tampilkan kanvas dan preview draf berdampingan"
+          >
+            Split (Kanvas + Preview)
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('preview')}
+            className={cn(
+              'h-8 px-2.5 font-medium transition-colors border-l border-white/10',
+              viewMode === 'preview'
+                ? 'bg-[#4268ff] text-white'
+                : 'text-slate-300 hover:bg-white/10 hover:text-white',
+            )}
+            title="Tampilkan preview draf struktur penuh"
+          >
+            Preview Draf
+          </button>
+        </div>
+
+        {/* Mode Uji Aksi */}
         <button
           type="button"
-          aria-pressed={preview}
+          aria-pressed={testMode}
           onClick={() => {
-            setPreview((v) => !v)
+            setTestMode((v) => !v)
             setMenu(null)
           }}
           className={cn(
-            'h-8 rounded border px-2.5 text-xs font-medium',
-            preview ? 'border-amber-400/60 bg-amber-500/25 text-amber-100' : 'border-white/15 bg-white/5 text-slate-300',
+            'h-8 rounded border px-2 text-xs font-medium',
+            testMode
+              ? 'border-amber-400/60 bg-amber-500/25 text-amber-100'
+              : 'border-white/15 bg-white/5 text-slate-300 hover:bg-white/10',
           )}
-          title="Mode uji: klik kotak menjalankan aksinya"
-          aria-label="Mode uji preview"
+          title="Mode uji interaktif: klik kotak pada kanvas untuk menjalankan aksi simulasi"
+          aria-label="Mode uji aksi"
         >
-          Preview
+          {testMode ? 'Keluar Uji' : 'Uji Aksi'}
         </button>
 
         <div className="ml-auto flex items-center gap-2.5">
@@ -2053,11 +2239,16 @@ export function HotspotEditor({
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* ---------- Stage ---------- */}
         <div
           ref={stageRef}
-          className="relative flex-1 overflow-hidden bg-[#070b14]"
+          className={cn(
+            'relative overflow-hidden bg-[#070b14]',
+            viewMode === 'split' && 'w-1/2 min-w-[380px] flex-1',
+            viewMode === 'canvas' && 'flex-1',
+            viewMode === 'preview' && 'hidden',
+          )}
           style={{ cursor: stageCursor }}
           onPointerDown={handleStagePointerDown}
         >
@@ -2086,14 +2277,14 @@ export function HotspotEditor({
                 const isManual = box.layer === 'manual'
                 const color = isSelected
                   ? '#22d3ee'
-                  : preview
+                  : testMode
                     ? 'rgba(148,163,184,0.75)'
                     : isManual
                       ? '#3b82f6'
                       : '#22c55e'
                 const background = isSelected
                   ? 'rgba(34,211,238,0.12)'
-                  : preview
+                  : testMode
                     ? 'rgba(148,163,184,0.06)'
                     : isManual
                       ? 'rgba(59,130,246,0.12)'
@@ -2119,7 +2310,7 @@ export function HotspotEditor({
                       setListTab(box.layer)
                     }}
                     onClick={(e) => {
-                      if (!preview) return
+                      if (!testMode) return
                       e.stopPropagation()
                       runAction(box)
                     }}
@@ -2134,12 +2325,12 @@ export function HotspotEditor({
                       backgroundColor: background,
                       borderRadius: 2 / scale,
                       pointerEvents: 'auto',
-                      cursor: preview ? (box.element_type === 'dropdown' ? 'default' : 'pointer') : 'move',
+                      cursor: testMode ? (box.element_type === 'dropdown' ? 'default' : 'pointer') : 'move',
                       zIndex: isSelected ? 30 : isManual ? 20 : 10,
                     }}
                   >
                     {/* Render Dropdown element in preview mode */}
-                    {preview && box.element_type === 'dropdown' && (
+                    {testMode && box.element_type === 'dropdown' && (
                       <div
                         className="h-full w-full p-0.5"
                         onClick={(e) => e.stopPropagation()}
@@ -2172,7 +2363,7 @@ export function HotspotEditor({
                         </select>
                       </div>
                     )}
-                    {!preview && (
+                    {!testMode && (
                       <>
                         {/* Small badge in top-left corner - always visible */}
                         <span
@@ -2250,7 +2441,7 @@ export function HotspotEditor({
                     )}
 
                     {/* Tombol kecil hapus di pojok kanan atas kotak yang sedang terpilih */}
-                    {!preview && isSelected && (
+                    {!testMode && isSelected && (
                       <button
                         type="button"
                         onPointerDown={(e) => {
@@ -2289,7 +2480,7 @@ export function HotspotEditor({
                       </button>
                     )}
 
-                    {!preview &&
+                    {!testMode &&
                       isSelected &&
                       RESIZE_DIRS.map((dir) => {
                         const size = Math.max(8, HANDLE_SCREEN / scale)
@@ -2406,6 +2597,31 @@ export function HotspotEditor({
             </>
           )}
         </div>
+
+        {/* ---------- Panel Preview Draf (Split / Preview) ---------- */}
+        {(viewMode === 'split' || viewMode === 'preview') && (
+          <div
+            className={cn(
+              'flex flex-col border-l border-white/10 bg-slate-900/95 overflow-hidden',
+              viewMode === 'split' ? 'w-1/2 min-w-[380px] flex-1' : 'flex-1',
+            )}
+          >
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 bg-slate-950/70 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-xs font-semibold text-slate-200">
+                  Pratinjau Hasil Draf (Real-time)
+                </span>
+              </div>
+              <span className="text-[11px] text-slate-400">
+                {boxes.length} kotak aktif di kanvas
+              </span>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-950/50">
+              <AIReconstructionPreview draft={liveDraft} />
+            </div>
+          </div>
+        )}
 
         {/* ---------- Sidebar ---------- */}
         <aside className="flex w-[330px] shrink-0 flex-col border-l border-white/10 bg-slate-900/90">
@@ -2741,7 +2957,7 @@ export function HotspotEditor({
         </button>
         <input id="hotspot-import-file" type="file" accept=".json" className="hidden" onChange={importJson} />
         <span className="ml-auto">
-          {preview ? 'Mode preview: klik kotak untuk menjalankan aksi.' : 'Perubahan tersimpan otomatis (debounce 500 ms).'}
+          {testMode ? 'Mode uji aksi: klik kotak untuk menjalankan aksi.' : 'Perubahan tersimpan otomatis (debounce 500 ms).'}
         </span>
       </footer>
 
