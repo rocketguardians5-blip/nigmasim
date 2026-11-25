@@ -1392,39 +1392,137 @@ def _skipped_versions(
     return skipped
 
 
+def _clean_nav_label(label: str) -> str:
+    cleaned = (label or "").strip()
+    # Hapus suffix status aktif mis. " Active", " (Active)", " Aktif"
+    cleaned = re.sub(r"\s+(?:Active|Aktif|\(Active\)|\(Aktif\))$", "", cleaned, flags=re.IGNORECASE).strip()
+    # Hapus prefix umum seperti "Menu ", "Navigasi ", "Link ", "Tombol "
+    cleaned = re.sub(r"^(?:menu|navigasi|link|tombol)\s+", "", cleaned, flags=re.IGNORECASE).strip()
+    return cleaned
+
+
 def _build_nav(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     app_pages = [page for page in pages if page.get("kind") != "auth"]
     if not app_pages:
         return []
 
+    # Kumpulkan seluruh label navigasi / sidebar dari semua halaman sebagai referensi
+    all_nav_labels: list[str] = []
+    for page in pages:
+        for raw in (page.get("navLabels") or []):
+            cleaned = _clean_nav_label(raw)
+            if cleaned and cleaned not in all_nav_labels:
+                all_nav_labels.append(cleaned)
+
     nav: list[dict[str, Any]] = []
     used: set[str] = set()
+
     for page in app_pages:
-        keywords = {_normalize(page["title"]), _normalize(page["route"]), _normalize(page["key"])}
-        label = _short_title(page["title"])
-        for raw in (page.get("navLabels") or []):
-            normalized = _normalize(raw)
-            if any(keyword and (keyword in normalized or normalized in keyword) for keyword in keywords):
-                label = raw
-                break
-            if "dashboard" in normalized and "dashboard" in _normalize(page["title"]):
-                label = raw
-                break
-            if "playground" in normalized and "playground" in _normalize(page["title"]):
-                label = raw
-                break
-            if "error" in normalized and "error" in _normalize(page["title"]):
-                label = raw
-                break
-        if page["key"] in used:
+        page_key = page.get("key", "")
+        if page_key in used:
             continue
-        used.add(page["key"])
-        nav.append({"page": page["key"], "label": label})
+
+        raw_title = page.get("title", "")
+        route = page.get("route", "")
+        norm_title = _normalize(raw_title)
+        norm_route = _normalize(route)
+        norm_key = _normalize(page_key)
+        keywords = {norm_title, norm_route, norm_key}
+
+        # 1. Cari kandidat dari navLabels halaman ini sendiri
+        candidate_label: str | None = None
+        for raw in (page.get("navLabels") or []):
+            cleaned = _clean_nav_label(raw)
+            norm_raw = _normalize(cleaned)
+            if any(k and (k in norm_raw or norm_raw in k) for k in keywords):
+                candidate_label = cleaned
+                break
+            if "dashboard" in norm_raw and "dashboard" in norm_title:
+                candidate_label = cleaned
+                break
+            if "playground" in norm_raw and "playground" in norm_title:
+                candidate_label = cleaned
+                break
+            if "error" in norm_raw and "error" in norm_title:
+                candidate_label = cleaned
+                break
+
+        # 2. Jika tidak ditemukan di halaman ini, cari dari kumpulan all_nav_labels (sidebar dari halaman lain)
+        if not candidate_label:
+            for raw in all_nav_labels:
+                norm_raw = _normalize(raw)
+                if any(k and (k in norm_raw or norm_raw in k) for k in keywords):
+                    candidate_label = raw
+                    break
+                if "dashboard" in norm_raw and ("dashboard" in norm_title or norm_key == "dashboard"):
+                    candidate_label = raw
+                    break
+                if "playground" in norm_raw and ("playground" in norm_title or norm_key == "playground"):
+                    candidate_label = raw
+                    break
+                if "error" in norm_raw and ("error" in norm_title or "error" in norm_key):
+                    candidate_label = raw
+                    break
+
+        # 3. Fallback rapi jika belum ada kandidat
+        if not candidate_label:
+            if "playground" in norm_key or "playground" in norm_route or "playground" in norm_title:
+                candidate_label = "API Playground" if ("api" in norm_title or "api" in norm_key) else "Playground"
+            elif "dashboard" in norm_key or "dashboard" in norm_route or "dashboard" in norm_title:
+                candidate_label = "Dashboard"
+            elif "error" in norm_key or "error" in norm_route or "error" in norm_title:
+                candidate_label = "Error Codes"
+            else:
+                candidate_label = _short_title(raw_title)
+
+        candidate_label = _clean_nav_label(candidate_label)
+        used.add(page_key)
+        nav.append({"page": page_key, "label": candidate_label})
+
+    # Pastikan SEMUA halaman non-auth ada di nav (termasuk bertipe 'custom')
+    nav_keys = {item["page"] for item in nav}
+    for page in app_pages:
+        pk = page.get("key", "")
+        if pk and pk not in nav_keys:
+            label = _short_title(page.get("title", pk))
+            nav.append({"page": pk, "label": _clean_nav_label(label)})
+            nav_keys.add(pk)
+
     return nav
 
 
 def _apply_action_targets(pages: list[dict[str, Any]]) -> None:
     first_app_page = next((p for p in pages if p.get("kind") != "auth"), None)
+    playground_page = next(
+        (
+            p
+            for p in pages
+            if p.get("key") == "playground"
+            or p.get("route") == "/playground"
+            or "playground" in _normalize(p.get("title", ""))
+        ),
+        None,
+    )
+    error_page = next(
+        (
+            p
+            for p in pages
+            if p.get("key") in ("error-codes", "error", "errors")
+            or "error" in p.get("route", "")
+            or "error" in _normalize(p.get("title", ""))
+        ),
+        None,
+    )
+    dashboard_page = next(
+        (
+            p
+            for p in pages
+            if p.get("key") == "dashboard"
+            or p.get("route") == "/dashboard"
+            or "dashboard" in _normalize(p.get("title", ""))
+        ),
+        None,
+    )
 
     for page in pages:
         for section in page.get("sections") or []:
@@ -1433,16 +1531,21 @@ def _apply_action_targets(pages: list[dict[str, Any]]) -> None:
             elif section.get("type") == "actions":
                 for action in section.get("items") or []:
                     label = _normalize(action.get("label", ""))
-                    for target in pages:
-                        if target["key"] == page["key"]:
-                            continue
-                        title = _normalize(target["title"])
-                        if "playground" in label and "playground" in title:
-                            action["navigateTo"] = target["route"]
-                        elif "error" in label and "error" in title:
-                            action["navigateTo"] = target["route"]
-                        elif "dashboard" in label and "dashboard" in title:
-                            action["navigateTo"] = target["route"]
+                    if playground_page and page.get("key") != playground_page.get("key") and "playground" in label:
+                        action["navigateTo"] = playground_page["route"]
+                    elif error_page and page.get("key") != error_page.get("key") and "error" in label:
+                        action["navigateTo"] = error_page["route"]
+                    elif dashboard_page and page.get("key") != dashboard_page.get("key") and "dashboard" in label:
+                        action["navigateTo"] = dashboard_page["route"]
+                    else:
+                        for target in pages:
+                            if target["key"] == page["key"]:
+                                continue
+                            target_title = _normalize(target.get("title", ""))
+                            target_key = _normalize(target.get("key", ""))
+                            if (target_key and target_key in label) or (target_title and target_title in label):
+                                action["navigateTo"] = target["route"]
+                                break
 
 
 def _render_assumptions_markdown(

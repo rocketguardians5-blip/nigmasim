@@ -18,8 +18,10 @@ from unittest.mock import MagicMock
 from app.models.capture import Screen
 from app.models.reconstruction import Reconstruction, ReconstructionComponent
 from app.services.simulation_generator import (
+    _apply_action_targets,
     _build_definition,
     _build_field,
+    _build_nav,
     _build_page,
     _extract_safe_icon_svg,
     _extract_safe_style,
@@ -413,4 +415,119 @@ def test_static_text_and_footer_not_converted_to_form_fields():
     assert not any("gateway" in lbl.lower() for lbl in field_labels)
     assert not any("cipta" in lbl.lower() for lbl in field_labels)
     assert not any("footer" in lbl.lower() for lbl in field_labels)
+
+
+def test_custom_page_and_all_non_auth_pages_included_in_nav():
+    """Memverifikasi bahwa SEMUA halaman non-auth (termasuk jenis 'custom') masuk ke nav sidebar
+
+    dengan label yang rapi dan bebas suffix status 'Active'.
+    """
+    pages = [
+        {
+            "key": "login",
+            "title": "API Nigma Portal Login",
+            "route": "/login",
+            "kind": "auth",
+            "sections": [],
+            "navLabels": [],
+        },
+        {
+            "key": "dashboard",
+            "title": "API Nigma Portal Overview",
+            "route": "/dashboard",
+            "kind": "dashboard",
+            "sections": [],
+            "navLabels": ["Dashboard", "API Playground", "Error Codes Active"],
+        },
+        {
+            "key": "playground",
+            "title": "API Playground - Interactive HTTP Client - Developer API Gateway",
+            "route": "/playground",
+            "kind": "custom",
+            "sections": [],
+            "navLabels": [],
+        },
+        {
+            "key": "error-codes",
+            "title": "Katalog Referensi Kode Error - API Nigma - Developer API Gateway",
+            "route": "/error-codes",
+            "kind": "table",
+            "sections": [],
+            "navLabels": [],
+        },
+    ]
+
+    nav = _build_nav(pages)
+
+    # 1. Login auth tidak masuk nav
+    assert not any(item["page"] == "login" for item in nav)
+
+    # 2. Halaman custom (playground) wajib masuk nav
+    playground_item = next((item for item in nav if item["page"] == "playground"), None)
+    assert playground_item is not None
+    assert playground_item["label"] == "API Playground"
+
+    # 3. Dashboard masuk nav dengan label rapi
+    dashboard_item = next((item for item in nav if item["page"] == "dashboard"), None)
+    assert dashboard_item is not None
+    assert dashboard_item["label"] == "Dashboard"
+
+    # 4. Error codes masuk nav dan suffix 'Active' dibersihkan
+    error_item = next((item for item in nav if item["page"] == "error-codes"), None)
+    assert error_item is not None
+    assert error_item["label"] == "Error Codes"
+
+
+def test_dashboard_buka_playground_actions_navigate_to_playground():
+    """Memverifikasi tombol 'Buka Playground' dan aksi terkait di Dashboard
+
+    otomatis memiliki target navigasi ke route '/playground'.
+    """
+    pages = [
+        {
+            "key": "dashboard",
+            "title": "Dashboard Overview",
+            "route": "/dashboard",
+            "kind": "dashboard",
+            "sections": [
+                {
+                    "type": "actions",
+                    "title": "Aksi halaman",
+                    "items": [
+                        {"label": "Buka Playground Utama"},
+                        {"label": "Buka Playground"},
+                        {"label": "Playground SIMRS NigmaCare"},
+                        {"label": "Katalog Error"},
+                        {"label": "Tambah Project"},
+                    ],
+                }
+            ],
+        },
+        {
+            "key": "playground",
+            "title": "API Playground",
+            "route": "/playground",
+            "kind": "custom",
+            "sections": [],
+        },
+        {
+            "key": "error-codes",
+            "title": "Error Codes",
+            "route": "/error-codes",
+            "kind": "table",
+            "sections": [],
+        },
+    ]
+
+    _apply_action_targets(pages)
+
+    action_items = pages[0]["sections"][0]["items"]
+    by_label = {item["label"]: item for item in action_items}
+
+    assert by_label["Buka Playground Utama"].get("navigateTo") == "/playground"
+    assert by_label["Buka Playground"].get("navigateTo") == "/playground"
+    assert by_label["Playground SIMRS NigmaCare"].get("navigateTo") == "/playground"
+    assert by_label["Katalog Error"].get("navigateTo") == "/error-codes"
+    assert by_label["Tambah Project"].get("navigateTo") is None
+
 

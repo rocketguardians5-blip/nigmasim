@@ -1,11 +1,11 @@
 {
   "slug": "demo-client-api-nigma",
   "name": "Demo Client",
-  "description": "Simulasi hidup Api-Nigma — dibangun dari 3 layar rekonstruksi yang disetujui.",
+  "description": "Simulasi hidup Api-Nigma — dibangun dari 4 layar rekonstruksi yang disetujui.",
   "project_id": 2,
   "application_id": 2,
   "application_name": "Api-Nigma",
-  "generated_at": "2026-11-24T09:57:01Z",
+  "generated_at": "2026-11-25T06:49:47Z",
   "runtime_path": "/?app=demo-client-api-nigma",
   "screens": [
     {
@@ -21,63 +21,20 @@
       "kind": "dashboard"
     },
     {
+      "key": "playground",
+      "title": "API Playground - Interactive HTTP Client - Developer API Gateway",
+      "route": "/playground",
+      "kind": "custom"
+    },
+    {
       "key": "error-codes",
       "title": "Katalog Referensi Kode Error - API Nigma - Developer API Gateway",
       "route": "/error-codes",
       "kind": "table"
     }
   ],
-  "errors": [
-    {
-      "screen_key": "api-playground---interactive-http-client---developer-api-gat",
-      "screen_title": "API Playground - Interactive HTTP Client - Developer API Gateway",
-      "reason": "Rekonstruksi tidak punya komponen atau section yang bisa dipakai."
-    }
-  ],
-  "skipped": [
-    {
-      "screen_key": "masuk-ke-portal---api-nigma",
-      "screen_title": "Masuk ke Portal - API Nigma",
-      "screen_id": 4,
-      "capture_version": 2,
-      "reason": "Versi capture v2 dilewati (status draft); memakai v3 yang sudah disetujui."
-    },
-    {
-      "screen_key": "masuk-ke-portal---api-nigma",
-      "screen_title": "Masuk ke Portal - API Nigma",
-      "screen_id": 3,
-      "capture_version": 1,
-      "reason": "Versi capture v1 dilewati (status belum ada rekonstruksi); memakai v3 yang sudah disetujui."
-    },
-    {
-      "screen_key": "dashboard-overview---api-nigma-portal---developer-api-gatewa",
-      "screen_title": "Dashboard Overview - API Nigma Portal - Developer API Gateway",
-      "screen_id": 5,
-      "capture_version": 1,
-      "reason": "Versi capture v1 dilewati (status approved); memakai v2 yang sudah disetujui."
-    },
-    {
-      "screen_key": "api-playground---interactive-http-client---developer-api-gat",
-      "screen_title": "API Playground - Interactive HTTP Client - Developer API Gateway",
-      "screen_id": 11,
-      "capture_version": 3,
-      "reason": "Versi capture v3 dilewati (status draft); memakai v2 yang sudah disetujui."
-    },
-    {
-      "screen_key": "api-playground---interactive-http-client---developer-api-gat",
-      "screen_title": "API Playground - Interactive HTTP Client - Developer API Gateway",
-      "screen_id": 6,
-      "capture_version": 1,
-      "reason": "Versi capture v1 dilewati (status draft); memakai v2 yang sudah disetujui."
-    },
-    {
-      "screen_key": "katalog-referensi-kode-error---api-nigma---developer-api-gat",
-      "screen_title": "Katalog Referensi Kode Error - API Nigma - Developer API Gateway",
-      "screen_id": 12,
-      "capture_version": 2,
-      "reason": "Versi capture v2 dilewati (status belum ada rekonstruksi); memakai v1 yang sudah disetujui."
-    }
-  ],
+  "errors": [],
+  "skipped": [],
   "assumptions": [
     {
       "screen_title": "API Nigma Portal",
@@ -91,13 +48,13 @@
         },
         {
           "topic": "Layout",
-          "description": "Tampilan halaman berupa form login terpusat (centered card design) tanpa sidebar atau header navigasi atas.",
+          "description": "Halaman login sederhana terpusat di tengah layar tanpa header atau sidebar navigasi.",
           "confidence": "high",
           "resolved": true
         },
         {
           "topic": "Form",
-          "description": "Form login berisi input email/username, password dengan toggle visibilitas, checkbox ingat saya, link lupa password, dan tombol submit utama.",
+          "description": "Form login berisi input Email/Username, Password, Checkbox Ingat Saya, dan tombol submit Masuk ke Portal.",
           "confidence": "high",
           "resolved": true
         }
@@ -115,13 +72,37 @@
         },
         {
           "topic": "Layout",
-          "description": "Aplikasi memiliki sidebar kiri tetap dengan lebar 256px dan area konten utama yang dapat di-scroll.",
+          "description": "Aplikasi menggunakan tata letak Dasbor standar dengan navigasi sidebar di sebelah kiri dan header ringkas di atas.",
+          "confidence": "high",
+          "resolved": true
+        },
+        {
+          "topic": "Form",
+          "description": "Komponen filter lingkungan pada header berupa dropdown interaktif untuk memilih status Production/Staging.",
+          "confidence": "medium",
+          "resolved": true
+        }
+      ]
+    },
+    {
+      "screen_title": "API Playground - Interactive HTTP Client - Developer API Gateway",
+      "route": "/playground",
+      "items": [
+        {
+          "topic": "Aturan bisnis",
+          "description": "Aturan bisnis TIDAK bisa dibaca dari tampilan. Semua aturan wajib diisi manual oleh pemilik proses.",
+          "confidence": "low",
+          "resolved": true
+        },
+        {
+          "topic": "Layout",
+          "description": "Aplikasi menggunakan skema tiga panel utama: Sidebar navigasi di sebelah kiri, panel Collections dan Request Builder di tengah, serta panel Response Viewer di sebelah kanan.",
           "confidence": "high",
           "resolved": true
         },
         {
           "topic": "Komponen",
-          "description": "Kartu layanan mikro dan kartu statistik memberikan visualisasi cepat status operasional dan statistik gateway.",
+          "description": "Area Request Builder memungkinkan modifikasi HTTP method, URL endpoint, parameter query, serta pengiriman permintaan ke Gateway secara langsung.",
           "confidence": "high",
           "resolved": true
         }
@@ -139,14 +120,14 @@
         },
         {
           "topic": "Layout",
-          "description": "Sidebar menggunakan navigasi vertikal, area utama berisi tabel data dengan filter pencarian.",
+          "description": "Aplikasi menggunakan struktur navigasi sidebar tetap di sisi kiri dan panel kontrol utama di area kanan.",
           "confidence": "high",
           "resolved": true
         },
         {
           "topic": "Komponen",
-          "description": "Ikon tempat sampah pada tabel diasumsikan sebagai tombol hapus.",
-          "confidence": "medium",
+          "description": "Tabel data katalog kesalahan mendukung pencarian waktu nyata, filter berdasarkan proyek, dan penambahan item baru via modal/form.",
+          "confidence": "high",
           "resolved": true
         }
       ]

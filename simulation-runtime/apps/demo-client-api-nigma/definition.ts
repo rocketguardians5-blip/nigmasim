@@ -6,12 +6,16 @@ import type { SimAppDefinition } from '@sim/core'
 
 export const definition: SimAppDefinition = {
   "name": "Demo Client",
-  "description": "Simulasi hidup Api-Nigma — dibangun dari 3 layar rekonstruksi yang disetujui.",
+  "description": "Simulasi hidup Api-Nigma — dibangun dari 4 layar rekonstruksi yang disetujui.",
   "brand": "Demo Client",
   "nav": [
     {
       "page": "dashboard",
       "label": "Dashboard"
+    },
+    {
+      "page": "playground",
+      "label": "API Playground"
     },
     {
       "page": "error-codes",
@@ -145,9 +149,19 @@ export const definition: SimAppDefinition = {
           "title": "Aksi halaman",
           "items": [
             {
-              "label": "Tambah Project Banner Utama",
+              "label": "Ciutkan Sidebar",
+              "variant": "secondary",
+              "toast": "Aksi simulasi: Ciutkan Sidebar."
+            },
+            {
+              "label": "Profil Pengguna Nigma Administrator",
+              "variant": "secondary",
+              "toast": "Aksi simulasi: Profil Pengguna Nigma Administrator."
+            },
+            {
+              "label": "Tambah Project Utama",
               "variant": "primary",
-              "toast": "Aksi simulasi: Tambah Project Banner Utama."
+              "toast": "Aksi simulasi: Tambah Project Utama."
             },
             {
               "label": "Katalog Error",
@@ -156,29 +170,33 @@ export const definition: SimAppDefinition = {
               "navigateTo": "/error-codes"
             },
             {
-              "label": "Buka Playground",
+              "label": "Buka Playground Utama",
               "variant": "secondary",
-              "toast": "Aksi simulasi: Buka Playground."
+              "toast": "Aksi simulasi: Buka Playground Utama.",
+              "navigateTo": "/playground"
             },
             {
-              "label": "Tambah Project Sekunder",
+              "label": "Tambah Project Matrix",
               "variant": "primary",
-              "toast": "Aksi simulasi: Tambah Project Sekunder."
+              "toast": "Aksi simulasi: Tambah Project Matrix."
             },
             {
               "label": "Playground SIMRS NigmaCare",
               "variant": "secondary",
-              "toast": "Aksi simulasi: Playground SIMRS NigmaCare."
+              "toast": "Aksi simulasi: Playground SIMRS NigmaCare.",
+              "navigateTo": "/playground"
             },
             {
               "label": "Playground PIMS Mobile API",
               "variant": "secondary",
-              "toast": "Aksi simulasi: Playground PIMS Mobile API."
+              "toast": "Aksi simulasi: Playground PIMS Mobile API.",
+              "navigateTo": "/playground"
             },
             {
-              "label": "Playground PIMS Mobile API 2",
+              "label": "Playground PIMS Identity",
               "variant": "secondary",
-              "toast": "Aksi simulasi: Playground PIMS Mobile API 2."
+              "toast": "Aksi simulasi: Playground PIMS Identity.",
+              "navigateTo": "/playground"
             }
           ]
         },
@@ -187,19 +205,31 @@ export const definition: SimAppDefinition = {
           "title": "Tautan & kartu",
           "items": [
             {
-              "label": "Statistik Total APIs",
+              "label": "Stat Total APIs",
               "meta": "Kartu dari rekonstruksi"
             },
             {
-              "label": "Statistik Active Services",
+              "label": "Stat Active Services",
               "meta": "Kartu dari rekonstruksi"
             },
             {
-              "label": "Statistik Requests Today",
+              "label": "Stat Requests Today",
               "meta": "Kartu dari rekonstruksi"
             },
             {
-              "label": "Statistik Error Rate",
+              "label": "Stat Error Rate",
+              "meta": "Kartu dari rekonstruksi"
+            },
+            {
+              "label": "Layanan SIMRS NigmaCare",
+              "meta": "Kartu dari rekonstruksi"
+            },
+            {
+              "label": "Layanan PIMS Mobile API",
+              "meta": "Kartu dari rekonstruksi"
+            },
+            {
+              "label": "Layanan PIMS Mobile API (Identity)",
               "meta": "Kartu dari rekonstruksi"
             }
           ]
@@ -242,6 +272,231 @@ export const definition: SimAppDefinition = {
       }
     },
     {
+      "key": "playground",
+      "title": "API Playground - Interactive HTTP Client - Developer API Gateway",
+      "route": "/playground",
+      "subtitle": "/playground",
+      "kind": "custom",
+      "sections": [
+        {
+          "type": "form",
+          "title": "Form simulasi",
+          "fields": [
+            {
+              "key": "pilih_active_project_simrs_nigmacare",
+              "label": "Pilih Active Project (SIMRS NIGMACARE)",
+              "type": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "SIMRS",
+                  "label": "SIMRS"
+                },
+                {
+                  "value": "PIMS",
+                  "label": "PIMS"
+                },
+                {
+                  "value": "Mobile",
+                  "label": "Mobile"
+                }
+              ],
+              "style": {
+                "color": "rgb(100, 116, 139)",
+                "fontFamily": "\"Plus Jakarta Sans\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif",
+                "fontSize": "16px",
+                "lineHeight": "24px",
+                "borderColor": "rgb(229, 231, 235)"
+              }
+            },
+            {
+              "key": "pencarian_endpoint",
+              "label": "Pencarian Endpoint",
+              "type": "text",
+              "required": true,
+              "placeholder": "Cari endpoint di project ini...",
+              "style": {
+                "color": "rgb(17, 24, 39)",
+                "backgroundColor": "rgb(248, 250, 252)",
+                "fontFamily": "\"Plus Jakarta Sans\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif",
+                "fontSize": "12px",
+                "lineHeight": "16px",
+                "borderColor": "rgb(226, 232, 240)",
+                "borderRadius": "12px"
+              }
+            },
+            {
+              "key": "metode_http_get",
+              "label": "Metode HTTP (GET)",
+              "type": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "GET",
+                  "label": "GET"
+                },
+                {
+                  "value": "POST",
+                  "label": "POST"
+                },
+                {
+                  "value": "PUT",
+                  "label": "PUT"
+                },
+                {
+                  "value": "PATCH",
+                  "label": "PATCH"
+                },
+                {
+                  "value": "DELETE",
+                  "label": "DELETE"
+                }
+              ]
+            },
+            {
+              "key": "input_url_api_request",
+              "label": "Input URL API Request",
+              "type": "text",
+              "required": true,
+              "placeholder": "https://api.example.com/v1/resource",
+              "style": {
+                "color": "rgb(17, 24, 39)",
+                "backgroundColor": "rgb(250, 250, 249)",
+                "fontFamily": "\"JetBrains Mono\", monospace",
+                "fontSize": "12px",
+                "lineHeight": "16px",
+                "borderColor": "rgb(231, 229, 228)",
+                "borderRadius": "12px"
+              }
+            },
+            {
+              "key": "parameter_aktif_nik",
+              "label": "Parameter Aktif (nik)",
+              "type": "text",
+              "required": true,
+              "placeholder": "Cari endpoint di project ini...",
+              "style": {
+                "color": "rgb(79, 70, 229)",
+                "fontFamily": "\"Plus Jakarta Sans\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif",
+                "fontSize": "16px",
+                "lineHeight": "24px"
+              }
+            },
+            {
+              "key": "key_query_parameter_nik",
+              "label": "Key Query Parameter (nik)",
+              "type": "text",
+              "required": true,
+              "placeholder": "Parameter Key",
+              "style": {
+                "color": "rgb(17, 24, 39)",
+                "backgroundColor": "rgb(250, 250, 249)",
+                "fontFamily": "\"JetBrains Mono\", monospace",
+                "fontSize": "12px",
+                "lineHeight": "16px",
+                "borderColor": "rgb(231, 229, 228)",
+                "borderRadius": "8px"
+              }
+            }
+          ],
+          "submitLabel": "Kirim Request (Send)",
+          "successToast": "Kirim Request (Send) disimulasikan. Tidak ada API asli yang dipanggil."
+        },
+        {
+          "type": "actions",
+          "title": "Aksi halaman",
+          "items": [
+            {
+              "label": "Tentukan/Sembunyikan Sidebar",
+              "variant": "secondary",
+              "toast": "Aksi simulasi: Tentukan/Sembunyikan Sidebar."
+            },
+            {
+              "label": "Profil Pengguna (Nigma Administrator)",
+              "variant": "secondary",
+              "toast": "Aksi simulasi: Profil Pengguna (Nigma Administrator)."
+            },
+            {
+              "label": "Import / Tambah Endpoint",
+              "variant": "primary",
+              "toast": "Aksi simulasi: Import / Tambah Endpoint."
+            },
+            {
+              "label": "+ Manual Endpoint",
+              "variant": "secondary",
+              "toast": "Aksi simulasi: + Manual Endpoint."
+            },
+            {
+              "label": "+ Tambah Project",
+              "variant": "primary",
+              "toast": "Aksi simulasi: + Tambah Project."
+            },
+            {
+              "label": "+ Manual (Koleksi)",
+              "variant": "secondary",
+              "toast": "Aksi simulasi: + Manual (Koleksi)."
+            },
+            {
+              "label": "Import (Koleksi)",
+              "variant": "primary",
+              "toast": "Aksi simulasi: Import (Koleksi)."
+            },
+            {
+              "label": "+ Tambah Parameter",
+              "variant": "primary",
+              "toast": "Aksi simulasi: + Tambah Parameter."
+            }
+          ]
+        },
+        {
+          "type": "list",
+          "title": "Tautan & kartu",
+          "items": [
+            {
+              "label": "Endpoint Cari Pasien by NIK",
+              "meta": "Kartu dari rekonstruksi"
+            },
+            {
+              "label": "Endpoint Generate SEP BPJS VClaim",
+              "meta": "Kartu dari rekonstruksi"
+            },
+            {
+              "label": "Endpoint Cek Stok Obat Depo Farmasi",
+              "meta": "Kartu dari rekonstruksi"
+            },
+            {
+              "label": "Endpoint Finalisasi Rekam Medis",
+              "meta": "Kartu dari rekonstruksi"
+            }
+          ]
+        }
+      ],
+      "theme": {
+        "page": {
+          "backgroundColor": "rgb(250, 250, 249)",
+          "fontFamily": "\"Plus Jakarta Sans\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif"
+        },
+        "primary": {
+          "backgroundColor": "rgb(255, 255, 255)",
+          "color": "rgb(68, 64, 60)",
+          "borderRadius": "12px",
+          "fontWeight": "700"
+        },
+        "card": {
+          "box": {
+            "x": 568,
+            "y": 162,
+            "w": 459,
+            "h": 730
+          },
+          "backgroundColor": "rgb(255, 255, 255)",
+          "borderColor": "rgba(231, 229, 228, 0.7)",
+          "borderRadius": "24px",
+          "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px"
+        }
+      }
+    },
+    {
       "key": "error-codes",
       "title": "Katalog Referensi Kode Error - API Nigma - Developer API Gateway",
       "route": "/error-codes",
@@ -250,8 +505,8 @@ export const definition: SimAppDefinition = {
       "sections": [
         {
           "type": "table",
-          "title": "Daftar Error",
-          "dataset": "daftar_error",
+          "title": "Katalog Kode Error Standar API Nigma",
+          "dataset": "katalog_kode_error_standar_api_nigma",
           "createLabel": "Tambah Error Code",
           "filters": [
             {
@@ -273,14 +528,67 @@ export const definition: SimAppDefinition = {
               ]
             }
           ]
+        },
+        {
+          "type": "actions",
+          "title": "Aksi halaman",
+          "items": [
+            {
+              "label": "Sembunyikan Sidebar",
+              "variant": "secondary",
+              "toast": "Aksi simulasi: Sembunyikan Sidebar."
+            },
+            {
+              "label": "Profil Nigma Administrator",
+              "variant": "secondary",
+              "toast": "Aksi simulasi: Profil Nigma Administrator."
+            },
+            {
+              "label": "Cari",
+              "variant": "secondary",
+              "toast": "Aksi simulasi: Cari."
+            },
+            {
+              "label": "Hapus Kode Error Row 1",
+              "variant": "danger",
+              "toast": "Aksi simulasi: Hapus Kode Error Row 1."
+            },
+            {
+              "label": "Hapus Kode Error Row 2",
+              "variant": "danger",
+              "toast": "Aksi simulasi: Hapus Kode Error Row 2."
+            }
+          ]
         }
-      ]
+      ],
+      "theme": {
+        "page": {
+          "backgroundColor": "rgb(250, 250, 249)",
+          "fontFamily": "\"Plus Jakarta Sans\", -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif"
+        },
+        "primary": {
+          "color": "rgb(168, 162, 158)",
+          "borderRadius": "12px"
+        },
+        "card": {
+          "box": {
+            "x": 280,
+            "y": 462,
+            "w": 1130,
+            "h": 1189
+          },
+          "backgroundColor": "rgb(255, 255, 255)",
+          "borderColor": "rgba(231, 229, 228, 0.7)",
+          "borderRadius": "24px",
+          "boxShadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px"
+        }
+      }
     }
   ],
   "datasets": [
     {
-      "key": "daftar_error",
-      "label": "Daftar Error",
+      "key": "katalog_kode_error_standar_api_nigma",
+      "label": "Katalog Kode Error Standar API Nigma",
       "fields": [
         {
           "key": "code",

@@ -12,7 +12,7 @@
       "slug": "demo-client-api-nigma",
       "name": "Demo Client",
       "icon": "grid",
-      "description": "Simulasi hidup Api-Nigma — dibangun dari 3 layar rekonstruksi yang disetujui.",
+      "description": "Simulasi hidup Api-Nigma — dibangun dari 4 layar rekonstruksi yang disetujui.",
       "path": "/?app=demo-client-api-nigma",
       "accent": "#4268ff"
     },
